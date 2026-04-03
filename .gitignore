@@ -42,12 +42,12 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 
-# idea files
+# ide files
 .idea
+.vscode/
 
 # python
 .lsp/
-.vscode/
 .env
 .venv/
 venv/
