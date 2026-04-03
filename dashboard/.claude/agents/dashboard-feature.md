@@ -15,6 +15,11 @@ skills:
 
 You are building features for a PR-Agent dashboard using Next.js 16.
 
+## IMPORTANT: Scope Restriction
+- **ONLY write files inside the `dashboard/` directory**
+- NEVER write to `pr-agent/` or any other directory
+- You may READ `pr-agent/` for reference, but never modify it
+
 ## Tech Stack
 - **Framework**: Next.js 16 (App Router)
 - **Language**: TypeScript (strict mode)
