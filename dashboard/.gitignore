@@ -44,17 +44,3 @@ yarn-error.log*
 
 # ide files
 .idea
-.vscode/
-
-# python
-.lsp/
-.venv/
-venv/
-pr_agent/settings/.secrets.toml
-__pycache__
-dist/
-*.egg-info/
-docs/.cache/
-.qodo
-poetry.lock
-.secrets.toml
