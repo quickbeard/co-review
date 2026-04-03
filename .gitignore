@@ -48,7 +48,6 @@ yarn-error.log*
 
 # python
 .lsp/
-.env
 .venv/
 venv/
 pr_agent/settings/.secrets.toml
