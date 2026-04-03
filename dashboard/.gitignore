@@ -12,6 +12,7 @@ coverage
 prisma/db.sqlite
 prisma/db.sqlite-journal
 db.sqlite
+generated/prisma
 
 # next.js
 .next/
@@ -44,5 +45,3 @@ yarn-error.log*
 
 # ide files
 .idea
-
-/generated/prisma
