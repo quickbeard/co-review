@@ -12,17 +12,151 @@ datasource db {
   provider = "postgresql"
 }
 
-model User { 
-  id    Int     @id @default(autoincrement()) 
-  email String  @unique
-  name  String?
-  posts Post[]
-} 
-model Post { 
-  id        Int     @id @default(autoincrement()) 
-  title     String
-  content   String?
-  published Boolean @default(false) 
-  author    User    @relation(fields: [authorId], references: [id]) 
-  authorId  Int
+// =============================================================================
+// Enums
+// =============================================================================
+
+enum GitProviderType {
+  github
+  gitlab
+  bitbucket
+  azure_devops
+  gitea
+  gerrit
+}
+
+enum LLMServerType {
+  litellm
+  openrouter
+  ollama
+  openai
+  anthropic
+}
+
+enum ReviewStatus {
+  pending
+  in_progress
+  completed
+  failed
+}
+
+// =============================================================================
+// Core Models
+// =============================================================================
+
+model Organization {
+  id             String          @id @default(cuid())
+  name           String
+  slug           String          @unique
+  gitProviders   GitProvider[]
+  llmServers     LLMServer[]
+  reviewContexts ReviewContext[]
+  reviews        Review[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+}
+
+model GitProvider {
+  id             String          @id @default(cuid())
+  type           GitProviderType
+  name           String
+  baseUrl        String?         // For self-hosted instances (GitLab, Gitea, etc.)
+  accessToken    String          // Encrypted in application layer
+  webhookSecret  String?
+  isActive       Boolean         @default(true)
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  repositories   Repository[]
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@unique([organizationId, type, name])
+}
+
+model Repository {
+  id            String      @id @default(cuid())
+  externalId    String      // Repository ID from git provider
+  name          String
+  fullName      String      // e.g., "org/repo"
+  defaultBranch String      @default("main")
+  isActive      Boolean     @default(true) // Enable/disable reviews
+  settings      Json?       // Repository-specific PR-Agent settings override
+  gitProviderId String
+  gitProvider   GitProvider @relation(fields: [gitProviderId], references: [id], onDelete: Cascade)
+  reviews       Review[]
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@unique([gitProviderId, externalId])
+}
+
+model LLMServer {
+  id             String        @id @default(cuid())
+  type           LLMServerType
+  name           String
+  baseUrl        String        // API endpoint
+  apiKey         String?       // Encrypted in application layer
+  defaultModel   String        // Default model to use
+  fallbackModels String[]      // Fallback models if primary fails
+  maxTokens      Int           @default(32000)
+  timeout        Int           @default(120) // Seconds
+  isDefault      Boolean       @default(false)
+  isActive       Boolean       @default(true)
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@unique([organizationId, name])
+}
+
+model ReviewContext {
+  id             String       @id @default(cuid())
+  name           String
+  description    String?
+  content        String       @db.Text // Best practices, guidelines, coding standards
+  isGlobal       Boolean      @default(false) // Apply to all repos in org
+  priority       Int          @default(0) // Higher priority contexts are applied first
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, name])
+}
+
+// =============================================================================
+// Review Data
+// =============================================================================
+
+model Review {
+  id             String       @id @default(cuid())
+  prNumber       Int
+  prTitle        String
+  prUrl          String
+  prAuthor       String?
+  baseBranch     String?
+  headBranch     String?
+  status         ReviewStatus @default(pending)
+  score          Int?         // Overall review score (0-10)
+  summary        String?      @db.Text
+  findings       Json?        // Structured findings from review
+  suggestions    Json?        // Code suggestions
+  metadata       Json?        // Additional metadata (labels, effort, etc.)
+  tokensUsed     Int?
+  promptTokens   Int?
+  completionTokens Int?
+  durationMs     Int?
+  errorMessage   String?      @db.Text
+  repositoryId   String
+  repository     Repository   @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  completedAt    DateTime?
+
+  @@index([organizationId, createdAt])
+  @@index([repositoryId, createdAt])
+  @@index([status])
 }
