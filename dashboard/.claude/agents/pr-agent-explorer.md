@@ -4,7 +4,7 @@ tools:
   - Read
   - Glob
   - Grep
-model: sonnet
+model: opus
 skills:
   - vercel-react-best-practices
   - next-best-practices
