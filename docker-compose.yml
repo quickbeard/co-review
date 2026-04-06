@@ -140,8 +140,9 @@ services:
     build:
       context: ./dashboard
       dockerfile: Dockerfile
+      target: builder
     container_name: co-review-migrate
-    command: npx prisma migrate deploy
+    command: bunx prisma migrate deploy
     environment:
       DATABASE_URL: postgresql://postgres:postgres@postgres:5432/dashboard
     depends_on:

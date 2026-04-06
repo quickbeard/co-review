@@ -1,19 +1,13 @@
-FROM node:22-alpine AS base
+FROM oven/bun:1-alpine AS base
 
 # Install dependencies only when needed
 FROM base AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-# Install dependencies based on the preferred package manager
-COPY package.json bun.lock* package-lock.json* yarn.lock* pnpm-lock.yaml* ./
-RUN \
-  if [ -f bun.lock ]; then npm install -g bun && bun install --frozen-lockfile; \
-  elif [ -f yarn.lock ]; then yarn --frozen-lockfile; \
-  elif [ -f package-lock.json ]; then npm ci; \
-  elif [ -f pnpm-lock.yaml ]; then corepack enable pnpm && pnpm i --frozen-lockfile; \
-  else echo "Lockfile not found." && exit 1; \
-  fi
+# Install dependencies
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile
 
 # Rebuild the source code only when needed
 FROM base AS builder
@@ -21,20 +15,15 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Generate Prisma client
-RUN npx prisma generate
+# Generate Prisma client (provide dummy DATABASE_URL for build time)
+ENV DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"
+RUN bunx prisma generate
 
 # Build the application
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN \
-  if [ -f bun.lock ]; then npm install -g bun && bun run build; \
-  elif [ -f yarn.lock ]; then yarn build; \
-  elif [ -f package-lock.json ]; then npm run build; \
-  elif [ -f pnpm-lock.yaml ]; then corepack enable pnpm && pnpm build; \
-  else npm run build; \
-  fi
+RUN bun run build
 
-# Production image, copy all the files and run next
+# Production image
 FROM base AS runner
 WORKDIR /app
 
@@ -52,7 +41,7 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 # Copy Prisma files for migrations
 COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/generated ./generated
 COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
 USER nextjs
@@ -62,4 +51,4 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-CMD ["node", "server.js"]
+CMD ["bun", "run", "server.js"]

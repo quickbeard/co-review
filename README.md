@@ -125,6 +125,7 @@ docker compose up -d
 ```bash
 cd dashboard
 bun install
+bunx prisma generate
 bun run dev
 ```
 
