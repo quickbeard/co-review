@@ -1,0 +1,155 @@
+services:
+  # =============================================================================
+  # Databases
+  # =============================================================================
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: co-review-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: dashboard
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: co-review-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # =============================================================================
+  # PR-Agent Services
+  # =============================================================================
+
+  pr-agent-api:
+    build:
+      context: ./pr-agent
+      dockerfile: docker/Dockerfile
+      target: dashboard_api
+    container_name: co-review-pr-agent-api
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      DASHBOARD_HOST: "0.0.0.0"
+      DASHBOARD_PORT: "3001"
+    volumes:
+      # Mount the secrets file directly
+      - ./pr-agent/pr_agent/settings/.secrets.toml:/app/pr_agent/settings/.secrets.toml:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/api/v1/dashboard/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # GitHub webhook handler (optional - enable if using GitHub App)
+  pr-agent-github:
+    build:
+      context: ./pr-agent
+      dockerfile: docker/Dockerfile
+      target: github_app
+    container_name: co-review-pr-agent-github
+    restart: unless-stopped
+    profiles:
+      - github
+    ports:
+      - "3002:3000"
+    environment:
+      PORT: "3000"
+    volumes:
+      - ./pr-agent/pr_agent/settings/.secrets.toml:/app/pr_agent/settings/.secrets.toml:ro
+
+  # GitLab webhook handler (optional - enable if using GitLab)
+  pr-agent-gitlab:
+    build:
+      context: ./pr-agent
+      dockerfile: docker/Dockerfile
+      target: gitlab_webhook
+    container_name: co-review-pr-agent-gitlab
+    restart: unless-stopped
+    profiles:
+      - gitlab
+    ports:
+      - "3003:3000"
+    environment:
+      PORT: "3000"
+    volumes:
+      - ./pr-agent/pr_agent/settings/.secrets.toml:/app/pr_agent/settings/.secrets.toml:ro
+
+  # =============================================================================
+  # Dashboard
+  # =============================================================================
+
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    container_name: co-review-dashboard
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      # Use dashboard/.env directly
+      - ./dashboard/.env
+    environment:
+      NODE_ENV: production
+      # Override database URL to use docker network
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/dashboard
+      # Redis (for job queue)
+      REDIS_URL: redis://redis:6379
+      # PR-Agent API internal URL
+      PR_AGENT_API_URL: http://pr-agent-api:3001
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      pr-agent-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # =============================================================================
+  # Database Migrations (run once)
+  # =============================================================================
+
+  migrate:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    container_name: co-review-migrate
+    command: npx prisma migrate deploy
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/dashboard
+    depends_on:
+      postgres:
+        condition: service_healthy
+    profiles:
+      - migrate
+
+volumes:
+  postgres_data:
+  redis_data:
