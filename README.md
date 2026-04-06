@@ -35,6 +35,7 @@ AI-powered code review tool that acts as an automated, senior-level reviewer for
 ### 1. Configure Secrets
 
 **PR-Agent secrets** (`pr-agent/pr_agent/settings/.secrets.toml`):
+
 ```toml
 [openai]
 key = "sk-..."  # or use other LLM providers
@@ -45,12 +46,9 @@ deployment_type = "user"
 ```
 
 **Dashboard secrets** (`dashboard/.env`):
+
 ```env
 DATABASE_URL="postgresql://postgres:postgres@localhost:5432/dashboard"
-BETTER_AUTH_SECRET="your-secret-here"
-BETTER_AUTH_URL="http://localhost:3000"
-BETTER_AUTH_GITHUB_CLIENT_ID="your-client-id"
-BETTER_AUTH_GITHUB_CLIENT_SECRET="your-client-secret"
 ```
 
 ### 2. Run Database Migrations
@@ -71,12 +69,12 @@ Open [http://localhost:3000](http://localhost:3000)
 
 ## Services
 
-| Service | Port | Description |
-|---------|------|-------------|
-| `dashboard` | 3000 | Next.js web UI |
-| `pr-agent-api` | 3001 | PR-Agent REST API |
-| `postgres` | 5432 | PostgreSQL database |
-| `redis` | 6379 | Redis (job queue) |
+| Service        | Port | Description         |
+| -------------- | ---- | ------------------- |
+| `dashboard`    | 3000 | Next.js web UI      |
+| `pr-agent-api` | 3001 | PR-Agent REST API   |
+| `postgres`     | 5432 | PostgreSQL database |
+| `redis`        | 6379 | Redis (job queue)   |
 
 ### Optional Services (Profiles)
 
@@ -90,10 +88,10 @@ docker compose --profile github up -d
 docker compose --profile gitlab up -d
 ```
 
-| Profile | Service | Port | Description |
-|---------|---------|------|-------------|
+| Profile  | Service           | Port | Description         |
+| -------- | ----------------- | ---- | ------------------- |
 | `github` | `pr-agent-github` | 3002 | GitHub App webhooks |
-| `gitlab` | `pr-agent-gitlab` | 3003 | GitLab webhooks |
+| `gitlab` | `pr-agent-gitlab` | 3003 | GitLab webhooks     |
 
 ## Commands
 
