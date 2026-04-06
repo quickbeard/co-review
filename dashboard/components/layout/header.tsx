@@ -3,6 +3,7 @@
 import { Menu, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { ModeToggle } from "@/components/ui/mode-toggle";
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -33,6 +34,7 @@ export function Header({ onMenuClick, className }: HeaderProps) {
       </div>
 
       <div className="flex items-center gap-2">
+        <ModeToggle />
         <Button variant="ghost" size="icon-sm" aria-label="User menu">
           <User className="size-5" />
         </Button>
