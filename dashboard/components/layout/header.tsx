@@ -1,12 +1,12 @@
-"use client"
+"use client";
 
-import { Menu, User } from "lucide-react"
-import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
+import { Menu, User } from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 interface HeaderProps {
-  onMenuClick: () => void
-  className?: string
+  onMenuClick: () => void;
+  className?: string;
 }
 
 export function Header({ onMenuClick, className }: HeaderProps) {
@@ -14,7 +14,7 @@ export function Header({ onMenuClick, className }: HeaderProps) {
     <header
       className={cn(
         "flex h-14 items-center justify-between border-b border-border bg-background px-4",
-        className
+        className,
       )}
     >
       <div className="flex items-center gap-4">
@@ -38,5 +38,5 @@ export function Header({ onMenuClick, className }: HeaderProps) {
         </Button>
       </div>
     </header>
-  )
+  );
 }

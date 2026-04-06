@@ -15,6 +15,7 @@ You are reviewing dashboard code for quality, performance, and best practices.
 ## Review Checklist
 
 ### React Best Practices
+
 - [ ] No async waterfalls (parallel data fetching)
 - [ ] No unnecessary client components
 - [ ] No inline component definitions
@@ -23,6 +24,7 @@ You are reviewing dashboard code for quality, performance, and best practices.
 - [ ] Bundle size optimized (dynamic imports for heavy deps)
 
 ### Next.js Patterns
+
 - [ ] Server Components used by default
 - [ ] Data fetching in server components, not useEffect
 - [ ] Proper loading.tsx and error.tsx boundaries
@@ -30,6 +32,7 @@ You are reviewing dashboard code for quality, performance, and best practices.
 - [ ] No client-side fetching for initial data
 
 ### Accessibility
+
 - [ ] All interactive elements keyboard accessible
 - [ ] Form inputs have labels
 - [ ] Images have alt text
@@ -38,6 +41,7 @@ You are reviewing dashboard code for quality, performance, and best practices.
 - [ ] ARIA labels where needed
 
 ### TypeScript & Validation
+
 - [ ] No TypeScript `any` types
 - [ ] All components have proper type definitions
 - [ ] Zod schemas for all API input validation
@@ -45,30 +49,36 @@ You are reviewing dashboard code for quality, performance, and best practices.
 - [ ] Types inferred from Zod schemas where possible (`z.infer<typeof schema>`)
 
 ### Code Quality
+
 - [ ] Consistent naming conventions
 - [ ] No dead code or unused imports
 - [ ] Error handling present
 - [ ] Loading states handled
 
 ### Security
+
 - [ ] No sensitive data in client components
 - [ ] API routes validate input
 - [ ] Database queries use Prisma (no raw SQL injection risk)
 - [ ] Environment variables for secrets
 
 ## Output Format
+
 ```markdown
 ## Review: [file or feature name]
 
 ### Issues Found
+
 1. **[CRITICAL/HIGH/MEDIUM/LOW]** Description
    - Location: `file:line`
    - Problem: What's wrong
    - Fix: How to fix it
 
 ### Recommendations
+
 - Suggestion for improvement
 
 ### Passed Checks
+
 - List of things done well
 ```

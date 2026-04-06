@@ -1,9 +1,9 @@
-import { Shell } from "@/components/layout"
+import { Shell } from "@/components/layout";
 
 export default function DashboardLayout({
   children,
 }: {
-  children: React.ReactNode
+  children: React.ReactNode;
 }) {
-  return <Shell>{children}</Shell>
+  return <Shell>{children}</Shell>;
 }

@@ -7,7 +7,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "format": "prettier . --check",
+    "fix": "prettier . --write"
   },
   "dependencies": {
     "@base-ui/react": "^1.3.0",
@@ -15,7 +17,7 @@
     "@prisma/client": "^7.6.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "dotenv": "^17.4.0",
+    "dotenv": "^17.4.1",
     "lucide-react": "^1.7.0",
     "next": "16.2.2",
     "pg": "^8.20.0",
@@ -32,8 +34,10 @@
     "@types/pg": "^8.20.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
-    "eslint": "^10.1.0",
+    "eslint": "^10.2.0",
     "eslint-config-next": "16.2.2",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.8.1",
     "prisma": "^7.6.0",
     "tailwindcss": "^4.2.2",
     "typescript": "^6.0.2"

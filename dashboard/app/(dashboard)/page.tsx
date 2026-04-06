@@ -1,25 +1,26 @@
-import {
-  GitBranch,
-  FolderGit2,
-  Server,
-  ClipboardList,
-} from "lucide-react"
-import { cn } from "@/lib/utils"
+import { GitBranch, FolderGit2, Server, ClipboardList } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface StatCardProps {
-  title: string
-  value: string | number
-  description?: string
-  icon: React.ComponentType<{ className?: string }>
-  className?: string
+  title: string;
+  value: string | number;
+  description?: string;
+  icon: React.ComponentType<{ className?: string }>;
+  className?: string;
 }
 
-function StatCard({ title, value, description, icon: Icon, className }: StatCardProps) {
+function StatCard({
+  title,
+  value,
+  description,
+  icon: Icon,
+  className,
+}: StatCardProps) {
   return (
     <div
       className={cn(
         "rounded-lg border border-border bg-background p-6 shadow-sm",
-        className
+        className,
       )}
     >
       <div className="flex items-center justify-between">
@@ -35,14 +36,16 @@ function StatCard({ title, value, description, icon: Icon, className }: StatCard
         </div>
       </div>
     </div>
-  )
+  );
 }
 
 export default function DashboardPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Welcome to CoReview</h1>
+        <h1 className="text-2xl font-bold text-foreground">
+          Welcome to CoReview
+        </h1>
         <p className="mt-1 text-muted-foreground">
           Manage your code reviews and AI-powered PR analysis from one place.
         </p>
@@ -76,7 +79,9 @@ export default function DashboardPage() {
       </div>
 
       <div className="rounded-lg border border-border bg-background p-6">
-        <h2 className="text-lg font-semibold text-foreground">Getting Started</h2>
+        <h2 className="text-lg font-semibold text-foreground">
+          Getting Started
+        </h2>
         <p className="mt-2 text-muted-foreground">
           To begin using CoReview, follow these steps:
         </p>
@@ -88,5 +93,5 @@ export default function DashboardPage() {
         </ol>
       </div>
     </div>
-  )
+  );
 }
