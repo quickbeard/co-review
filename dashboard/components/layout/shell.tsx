@@ -1,30 +1,30 @@
-"use client"
+"use client";
 
-import { useState, useCallback } from "react"
-import { Sidebar, MobileSidebar } from "./sidebar"
-import { Header } from "./header"
-import { cn } from "@/lib/utils"
+import { useState, useCallback } from "react";
+import { Sidebar, MobileSidebar } from "./sidebar";
+import { Header } from "./header";
+import { cn } from "@/lib/utils";
 
 interface ShellProps {
-  children: React.ReactNode
-  className?: string
+  children: React.ReactNode;
+  className?: string;
 }
 
 export function Shell({ children, className }: ShellProps) {
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const toggleSidebar = useCallback(() => {
-    setSidebarCollapsed((prev) => !prev)
-  }, [])
+    setSidebarCollapsed((prev) => !prev);
+  }, []);
 
   const openMobileMenu = useCallback(() => {
-    setMobileMenuOpen(true)
-  }, [])
+    setMobileMenuOpen(true);
+  }, []);
 
   const closeMobileMenu = useCallback(() => {
-    setMobileMenuOpen(false)
-  }, [])
+    setMobileMenuOpen(false);
+  }, []);
 
   return (
     <div className="flex h-screen overflow-hidden bg-background">
@@ -45,12 +45,12 @@ export function Shell({ children, className }: ShellProps) {
         <main
           className={cn(
             "flex-1 overflow-y-auto bg-muted/30 p-4 md:p-6",
-            className
+            className,
           )}
         >
           {children}
         </main>
       </div>
     </div>
-  )
+  );
 }

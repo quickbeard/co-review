@@ -1,7 +1,7 @@
-"use client"
+"use client";
 
-import Link from "next/link"
-import { usePathname } from "next/navigation"
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   GitBranch,
@@ -12,9 +12,9 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-} from "lucide-react"
-import { cn } from "@/lib/utils"
-import { Button } from "@/components/ui/button"
+} from "lucide-react";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 const navigation = [
   { name: "Overview", href: "/", icon: LayoutDashboard },
@@ -24,28 +24,30 @@ const navigation = [
   { name: "Review Contexts", href: "/review-contexts", icon: FileText },
   { name: "Reviews", href: "/reviews", icon: ClipboardList },
   { name: "Settings", href: "/settings", icon: Settings },
-]
+];
 
 interface SidebarProps {
-  collapsed: boolean
-  onToggle: () => void
-  className?: string
+  collapsed: boolean;
+  onToggle: () => void;
+  className?: string;
 }
 
 export function Sidebar({ collapsed, onToggle, className }: SidebarProps) {
-  const pathname = usePathname()
+  const pathname = usePathname();
 
   return (
     <aside
       className={cn(
         "flex flex-col border-r border-border bg-background transition-all duration-300",
         collapsed ? "w-16" : "w-64",
-        className
+        className,
       )}
     >
       <div className="flex h-14 items-center justify-between border-b border-border px-4">
         {!collapsed && (
-          <span className="text-lg font-semibold text-foreground">CoReview</span>
+          <span className="text-lg font-semibold text-foreground">
+            CoReview
+          </span>
         )}
         <Button
           variant="ghost"
@@ -64,8 +66,8 @@ export function Sidebar({ collapsed, onToggle, className }: SidebarProps) {
 
       <nav className="flex-1 space-y-1 p-2">
         {navigation.map((item) => {
-          const isActive = pathname === item.href
-          const Icon = item.icon
+          const isActive = pathname === item.href;
+          const Icon = item.icon;
 
           return (
             <Link
@@ -76,29 +78,29 @@ export function Sidebar({ collapsed, onToggle, className }: SidebarProps) {
                 isActive
                   ? "bg-primary/10 text-primary"
                   : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                collapsed && "justify-center px-2"
+                collapsed && "justify-center px-2",
               )}
               title={collapsed ? item.name : undefined}
             >
               <Icon className="size-5 shrink-0" />
               {!collapsed && <span>{item.name}</span>}
             </Link>
-          )
+          );
         })}
       </nav>
     </aside>
-  )
+  );
 }
 
 interface MobileSidebarProps {
-  open: boolean
-  onClose: () => void
+  open: boolean;
+  onClose: () => void;
 }
 
 export function MobileSidebar({ open, onClose }: MobileSidebarProps) {
-  const pathname = usePathname()
+  const pathname = usePathname();
 
-  if (!open) return null
+  if (!open) return null;
 
   return (
     <>
@@ -109,13 +111,15 @@ export function MobileSidebar({ open, onClose }: MobileSidebarProps) {
       />
       <aside className="fixed inset-y-0 left-0 z-50 w-64 bg-background shadow-lg lg:hidden">
         <div className="flex h-14 items-center border-b border-border px-4">
-          <span className="text-lg font-semibold text-foreground">CoReview</span>
+          <span className="text-lg font-semibold text-foreground">
+            CoReview
+          </span>
         </div>
 
         <nav className="space-y-1 p-2">
           {navigation.map((item) => {
-            const isActive = pathname === item.href
-            const Icon = item.icon
+            const isActive = pathname === item.href;
+            const Icon = item.icon;
 
             return (
               <Link
@@ -126,16 +130,16 @@ export function MobileSidebar({ open, onClose }: MobileSidebarProps) {
                   "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
                   isActive
                     ? "bg-primary/10 text-primary"
-                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
                 )}
               >
                 <Icon className="size-5 shrink-0" />
                 <span>{item.name}</span>
               </Link>
-            )
+            );
           })}
         </nav>
       </aside>
     </>
-  )
+  );
 }
