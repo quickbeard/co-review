@@ -1,5 +1,8 @@
 import { GitBranch, FolderGit2, Server, ClipboardList } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getDictionary } from "@/app/dictionaries";
+import { hasLocale } from "@/lib/i18n/config";
+import { notFound } from "next/navigation";
 
 interface StatCardProps {
   title: string;
@@ -39,57 +42,67 @@ function StatCard({
   );
 }
 
-export default function DashboardPage() {
+export default async function DashboardPage({
+  params,
+}: {
+  params: Promise<{ lang: string }>;
+}) {
+  const { lang } = await params;
+
+  if (!hasLocale(lang)) {
+    notFound();
+  }
+
+  const dict = await getDictionary(lang);
+
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-foreground">
-          Welcome to CoReview
+          {dict.dashboard.welcome}
         </h1>
-        <p className="mt-1 text-muted-foreground">
-          Manage your code reviews and AI-powered PR analysis from one place.
-        </p>
+        <p className="mt-1 text-muted-foreground">{dict.dashboard.description}</p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          title="Git Providers"
+          title={dict.dashboard.gitProviders}
           value={0}
-          description="Connected providers"
+          description={dict.dashboard.connectedProviders}
           icon={GitBranch}
         />
         <StatCard
-          title="Repositories"
+          title={dict.dashboard.repositories}
           value={0}
-          description="Tracked repos"
+          description={dict.dashboard.trackedRepos}
           icon={FolderGit2}
         />
         <StatCard
-          title="LLM Servers"
+          title={dict.dashboard.llmServers}
           value={0}
-          description="Active servers"
+          description={dict.dashboard.activeServers}
           icon={Server}
         />
         <StatCard
-          title="Reviews"
+          title={dict.dashboard.reviews}
           value={0}
-          description="Total reviews"
+          description={dict.dashboard.totalReviews}
           icon={ClipboardList}
         />
       </div>
 
       <div className="rounded-lg border border-border bg-background p-6">
         <h2 className="text-lg font-semibold text-foreground">
-          Getting Started
+          {dict.dashboard.gettingStarted}
         </h2>
         <p className="mt-2 text-muted-foreground">
-          To begin using CoReview, follow these steps:
+          {dict.dashboard.gettingStartedDesc}
         </p>
         <ol className="mt-4 list-inside list-decimal space-y-2 text-muted-foreground">
-          <li>Connect a Git provider (GitHub, GitLab, etc.)</li>
-          <li>Add repositories you want to track</li>
-          <li>Configure an LLM server for AI-powered reviews</li>
-          <li>Set up review contexts to customize analysis</li>
+          <li>{dict.dashboard.step1}</li>
+          <li>{dict.dashboard.step2}</li>
+          <li>{dict.dashboard.step3}</li>
+          <li>{dict.dashboard.step4}</li>
         </ol>
       </div>
     </div>

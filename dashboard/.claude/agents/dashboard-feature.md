@@ -211,3 +211,55 @@ export function StatusBadge({ status }: Props) {
 - [ ] Labels are associated with inputs
 - [ ] Loading states are announced to screen readers
 - [ ] Sufficient color contrast (4.5:1 minimum)
+
+## Dark Mode Requirements
+
+All new features MUST support dark mode:
+
+- Use Tailwind's semantic color classes (`text-foreground`, `bg-background`, `border-border`, etc.) instead of hard-coded colors
+- Use `text-muted-foreground` for secondary text
+- Use `bg-muted` for subtle backgrounds
+- Test both light and dark themes before completing the feature
+- The app uses `next-themes` with the ThemeProvider — no additional setup needed
+
+## Localization Requirements
+
+All new features MUST support English (US) and Vietnamese localization:
+
+- **Dictionary files**: Add translations to `app/dictionaries/en-US.json` and `app/dictionaries/vi.json`
+- **Server Components**: Use `getDictionary(lang)` from `@/app/dictionaries`
+- **Client Components**: Use `useDictionary()` hook from `@/lib/i18n/dictionary-context`
+- Never hard-code user-facing strings — always use dictionary keys
+- Follow existing dictionary structure (namespace by feature, e.g., `dashboard.welcome`)
+
+### Example: Adding translations for a new feature
+
+```json
+// app/dictionaries/en-US.json
+{
+  "myFeature": {
+    "title": "My Feature",
+    "description": "Feature description"
+  }
+}
+```
+
+```json
+// app/dictionaries/vi.json
+{
+  "myFeature": {
+    "title": "Tính năng của tôi",
+    "description": "Mô tả tính năng"
+  }
+}
+```
+
+```tsx
+// Server Component
+const dict = await getDictionary(lang);
+<h1>{dict.myFeature.title}</h1>
+
+// Client Component
+const dict = useDictionary();
+<h1>{dict.myFeature.title}</h1>
+```

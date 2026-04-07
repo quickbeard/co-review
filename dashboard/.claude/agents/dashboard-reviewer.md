@@ -62,6 +62,23 @@ You are reviewing dashboard code for quality, performance, and best practices.
 - [ ] Database queries use Prisma (no raw SQL injection risk)
 - [ ] Environment variables for secrets
 
+### Dark Mode
+
+- [ ] Uses semantic Tailwind classes (`text-foreground`, `bg-background`, `border-border`, etc.)
+- [ ] No hard-coded color values that break in dark mode
+- [ ] Tested in both light and dark themes
+- [ ] Uses `text-muted-foreground` for secondary text
+- [ ] Uses `bg-muted` for subtle backgrounds
+
+### Localization (i18n)
+
+- [ ] No hard-coded user-facing strings
+- [ ] All text uses dictionary keys from `app/[lang]/dictionaries/`
+- [ ] Translations exist in both `app/dictionaries/en-US.json` and `app/dictionaries/vi.json`
+- [ ] Server Components use `getDictionary(lang)`
+- [ ] Client Components use `useDictionary()` hook
+- [ ] Dictionary keys follow namespace convention (e.g., `feature.key`)
+
 ## Output Format
 
 ```markdown

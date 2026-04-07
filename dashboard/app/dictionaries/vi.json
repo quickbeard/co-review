@@ -1,0 +1,40 @@
+{
+  "common": {
+    "appName": "CoReview"
+  },
+  "nav": {
+    "overview": "Tổng quan",
+    "gitProviders": "Nhà cung cấp Git",
+    "repositories": "Kho lưu trữ",
+    "llmServers": "Máy chủ LLM",
+    "reviewContexts": "Ngữ cảnh đánh giá",
+    "reviews": "Đánh giá",
+    "settings": "Cài đặt"
+  },
+  "sidebar": {
+    "expandSidebar": "Mở rộng thanh bên",
+    "collapseSidebar": "Thu gọn thanh bên"
+  },
+  "header": {
+    "openMenu": "Mở menu",
+    "userMenu": "Menu người dùng"
+  },
+  "dashboard": {
+    "welcome": "Chào mừng đến với CoReview",
+    "description": "Quản lý đánh giá code và phân tích PR bằng AI từ một nơi.",
+    "gitProviders": "Nhà cung cấp Git",
+    "connectedProviders": "Nhà cung cấp đã kết nối",
+    "repositories": "Kho lưu trữ",
+    "trackedRepos": "Kho đang theo dõi",
+    "llmServers": "Máy chủ LLM",
+    "activeServers": "Máy chủ đang hoạt động",
+    "reviews": "Đánh giá",
+    "totalReviews": "Tổng số đánh giá",
+    "gettingStarted": "Bắt đầu",
+    "gettingStartedDesc": "Để bắt đầu sử dụng CoReview, hãy làm theo các bước sau:",
+    "step1": "Kết nối nhà cung cấp Git (GitHub, GitLab, v.v.)",
+    "step2": "Thêm các kho lưu trữ bạn muốn theo dõi",
+    "step3": "Cấu hình máy chủ LLM cho đánh giá bằng AI",
+    "step4": "Thiết lập ngữ cảnh đánh giá để tùy chỉnh phân tích"
+  }
+}

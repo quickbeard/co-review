@@ -15,15 +15,23 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { useDictionary } from "@/lib/i18n/dictionary-context";
+import type { LucideIcon } from "lucide-react";
 
-const navigation = [
-  { name: "Overview", href: "/", icon: LayoutDashboard },
-  { name: "Git Providers", href: "/git-providers", icon: GitBranch },
-  { name: "Repositories", href: "/repositories", icon: FolderGit2 },
-  { name: "LLM Servers", href: "/llm-servers", icon: Server },
-  { name: "Review Contexts", href: "/review-contexts", icon: FileText },
-  { name: "Reviews", href: "/reviews", icon: ClipboardList },
-  { name: "Settings", href: "/settings", icon: Settings },
+interface NavItem {
+  nameKey: keyof ReturnType<typeof useDictionary>["nav"];
+  href: string;
+  icon: LucideIcon;
+}
+
+const navigation: NavItem[] = [
+  { nameKey: "overview", href: "/", icon: LayoutDashboard },
+  { nameKey: "gitProviders", href: "/git-providers", icon: GitBranch },
+  { nameKey: "repositories", href: "/repositories", icon: FolderGit2 },
+  { nameKey: "llmServers", href: "/llm-servers", icon: Server },
+  { nameKey: "reviewContexts", href: "/review-contexts", icon: FileText },
+  { nameKey: "reviews", href: "/reviews", icon: ClipboardList },
+  { nameKey: "settings", href: "/settings", icon: Settings },
 ];
 
 interface SidebarProps {
@@ -34,6 +42,12 @@ interface SidebarProps {
 
 export function Sidebar({ collapsed, onToggle, className }: SidebarProps) {
   const pathname = usePathname();
+  const dict = useDictionary();
+
+  // Extract locale from pathname (e.g., /en-US/settings -> en-US)
+  const locale = pathname.split("/")[1];
+  // Get the path without locale prefix for active state matching
+  const pathWithoutLocale = "/" + pathname.split("/").slice(2).join("/");
 
   return (
     <aside
@@ -46,7 +60,7 @@ export function Sidebar({ collapsed, onToggle, className }: SidebarProps) {
       <div className="flex h-14 items-center justify-between border-b border-border px-4">
         {!collapsed && (
           <span className="text-lg font-semibold text-foreground">
-            CoReview
+            {dict.common.appName}
           </span>
         )}
         <Button
@@ -54,7 +68,9 @@ export function Sidebar({ collapsed, onToggle, className }: SidebarProps) {
           size="icon-sm"
           onClick={onToggle}
           className={cn(collapsed && "mx-auto")}
-          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          aria-label={
+            collapsed ? dict.sidebar.expandSidebar : dict.sidebar.collapseSidebar
+          }
         >
           {collapsed ? (
             <ChevronRight className="size-4" />
@@ -66,13 +82,17 @@ export function Sidebar({ collapsed, onToggle, className }: SidebarProps) {
 
       <nav className="flex-1 space-y-1 p-2">
         {navigation.map((item) => {
-          const isActive = pathname === item.href;
+          const isActive =
+            pathWithoutLocale === item.href ||
+            (item.href === "/" && pathWithoutLocale === "");
           const Icon = item.icon;
+          const name = dict.nav[item.nameKey];
+          const localizedHref = `/${locale}${item.href === "/" ? "" : item.href}`;
 
           return (
             <Link
-              key={item.name}
-              href={item.href}
+              key={item.nameKey}
+              href={localizedHref}
               className={cn(
                 "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
                 isActive
@@ -80,10 +100,10 @@ export function Sidebar({ collapsed, onToggle, className }: SidebarProps) {
                   : "text-muted-foreground hover:bg-muted hover:text-foreground",
                 collapsed && "justify-center px-2",
               )}
-              title={collapsed ? item.name : undefined}
+              title={collapsed ? name : undefined}
             >
               <Icon className="size-5 shrink-0" />
-              {!collapsed && <span>{item.name}</span>}
+              {!collapsed && <span>{name}</span>}
             </Link>
           );
         })}
@@ -99,6 +119,11 @@ interface MobileSidebarProps {
 
 export function MobileSidebar({ open, onClose }: MobileSidebarProps) {
   const pathname = usePathname();
+  const dict = useDictionary();
+
+  // Extract locale from pathname
+  const locale = pathname.split("/")[1];
+  const pathWithoutLocale = "/" + pathname.split("/").slice(2).join("/");
 
   if (!open) return null;
 
@@ -112,19 +137,23 @@ export function MobileSidebar({ open, onClose }: MobileSidebarProps) {
       <aside className="fixed inset-y-0 left-0 z-50 w-64 bg-background shadow-lg lg:hidden">
         <div className="flex h-14 items-center border-b border-border px-4">
           <span className="text-lg font-semibold text-foreground">
-            CoReview
+            {dict.common.appName}
           </span>
         </div>
 
         <nav className="space-y-1 p-2">
           {navigation.map((item) => {
-            const isActive = pathname === item.href;
+            const isActive =
+              pathWithoutLocale === item.href ||
+              (item.href === "/" && pathWithoutLocale === "");
             const Icon = item.icon;
+            const name = dict.nav[item.nameKey];
+            const localizedHref = `/${locale}${item.href === "/" ? "" : item.href}`;
 
             return (
               <Link
-                key={item.name}
-                href={item.href}
+                key={item.nameKey}
+                href={localizedHref}
                 onClick={onClose}
                 className={cn(
                   "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
@@ -134,7 +163,7 @@ export function MobileSidebar({ open, onClose }: MobileSidebarProps) {
                 )}
               >
                 <Icon className="size-5 shrink-0" />
-                <span>{item.name}</span>
+                <span>{name}</span>
               </Link>
             );
           })}
