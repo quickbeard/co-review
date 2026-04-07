@@ -40,7 +40,11 @@ export function Header({ onMenuClick, className }: HeaderProps) {
       <div className="flex items-center gap-2">
         <LocaleSwitcher />
         <ModeToggle />
-        <Button variant="ghost" size="icon-sm" aria-label={dict.header.userMenu}>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label={dict.header.userMenu}
+        >
           <User className="size-5" />
         </Button>
       </div>

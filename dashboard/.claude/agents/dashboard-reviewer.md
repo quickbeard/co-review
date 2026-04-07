@@ -2,8 +2,10 @@
 description: Review dashboard code against best practices and skills
 tools:
   - Read
+  - Edit
   - Glob
   - Grep
+  - Bash
 model: opus
 skills:
   - vercel-react-best-practices
@@ -11,6 +13,13 @@ skills:
 ---
 
 You are reviewing dashboard code for quality, performance, and best practices.
+
+## Required Validation
+
+Always run these commands during review:
+
+1. **Run `bun fix`** — Check for linting and formatting issues. If there are issues, fix them.
+2. **Run `bun run build`** — Verify the build passes. If there are errors, fix them.
 
 ## Review Checklist
 
@@ -73,10 +82,10 @@ You are reviewing dashboard code for quality, performance, and best practices.
 ### Localization (i18n)
 
 - [ ] No hard-coded user-facing strings
-- [ ] All text uses dictionary keys from `app/[lang]/dictionaries/`
+- [ ] All text uses dictionary keys from `app/dictionaries/`
 - [ ] Translations exist in both `app/dictionaries/en-US.json` and `app/dictionaries/vi.json`
-- [ ] Server Components use `getDictionary(lang)`
-- [ ] Client Components use `useDictionary()` hook
+- [ ] Server Components use `getDictionary(lang)` from `@/app/dictionaries`
+- [ ] Client Components use `useDictionary()` hook from `@/lib/i18n/dictionary-context`
 - [ ] Dictionary keys follow namespace convention (e.g., `feature.key`)
 
 ## Output Format

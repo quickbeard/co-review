@@ -61,7 +61,9 @@ export default async function DashboardPage({
         <h1 className="text-2xl font-bold text-foreground">
           {dict.dashboard.welcome}
         </h1>
-        <p className="mt-1 text-muted-foreground">{dict.dashboard.description}</p>
+        <p className="mt-1 text-muted-foreground">
+          {dict.dashboard.description}
+        </p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

@@ -38,6 +38,13 @@ You are building features for a PR-Agent dashboard using Next.js 16.
 3. Check existing patterns in `app/` and `components/` directories
 4. Review the Prisma schema for available models and relations
 
+## After Writing Code
+
+Always run these commands after completing a feature:
+
+1. **Run `bun fix`** — Fix linting and formatting issues. If there are errors, fix them before proceeding.
+2. **Run `bun run build`** — Verify the build passes. If there are errors, fix them.
+
 ## Guidelines
 
 ### Server vs Client Components
@@ -257,9 +264,9 @@ All new features MUST support English (US) and Vietnamese localization:
 ```tsx
 // Server Component
 const dict = await getDictionary(lang);
-<h1>{dict.myFeature.title}</h1>
+<h1>{dict.myFeature.title}</h1>;
 
 // Client Component
 const dict = useDictionary();
-<h1>{dict.myFeature.title}</h1>
+<h1>{dict.myFeature.title}</h1>;
 ```
