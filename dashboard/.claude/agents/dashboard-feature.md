@@ -66,7 +66,8 @@ Always run these commands after completing a feature:
 
 1. **Run `bun fix`** — Fix linting and formatting issues. If there are errors, fix them before proceeding.
 2. **Run `bun test:run`** — Run unit tests. If there are failures, fix them.
-3. **Run `bun run build`** — Verify the build passes. If there are errors, fix them.
+3. **Run `bun playwright test --project=firefox`** — Run e2e tests on Firefox. If there are failures, fix them.
+4. **Run `bun run build`** — Verify the build passes. If there are errors, fix them.
 
 ## Unit Testing
 
@@ -142,6 +143,81 @@ describe("Item Actions", () => {
 ```bash
 bun test:run        # Single run
 bun test:coverage   # With coverage report
+```
+
+## E2E Testing
+
+Use **Playwright** for end-to-end testing. Write e2e tests for user-facing features after building them.
+
+### When to Write E2E Tests
+
+- **Always test**: New pages, critical user flows (forms, navigation, CRUD operations)
+- **Skip tests for**: Internal refactors, API-only routes, non-user-facing changes
+
+### Test Structure
+
+```
+e2e/
+└── [feature].spec.ts   # E2E tests for feature
+```
+
+### Example E2E Test
+
+```typescript
+import { test, expect } from "@playwright/test";
+
+test.describe("Feature Name", () => {
+  test("should display feature page", async ({ page }) => {
+    await page.goto("/en-US/feature");
+
+    // Use specific selectors to avoid strict mode violations
+    await expect(
+      page.getByRole("heading", { name: "Feature Title", level: 1 }),
+    ).toBeVisible();
+  });
+
+  test("should navigate to create page", async ({ page }) => {
+    await page.goto("/en-US/feature");
+
+    // Use .first() if multiple matching elements exist
+    await page.getByRole("link", { name: /add/i }).first().click();
+
+    await expect(page).toHaveURL(/\/feature\/new/);
+  });
+
+  test("should show form validation", async ({ page }) => {
+    await page.goto("/en-US/feature/new");
+
+    await page.getByRole("button", { name: /create/i }).click();
+
+    // Check for validation feedback
+    const input = page.getByLabel(/name/i);
+    await expect(input).toBeVisible();
+  });
+
+  test("should interact with select dropdown", async ({ page }) => {
+    await page.goto("/en-US/feature/new");
+
+    // Open select and choose option
+    await page.getByRole("combobox").click();
+    await expect(page.getByRole("option", { name: /option/i })).toBeVisible();
+  });
+});
+```
+
+### E2E Testing Tips
+
+- **Use specific selectors**: Prefer `{ level: 1 }` for headings, `.first()` for duplicate elements
+- **Use locale prefix**: Always use `/en-US/` prefix in URLs for consistent testing
+- **Avoid timeouts**: If elements don't appear, check for SSR issues (add `export const dynamic = "force-dynamic"` to page)
+- **Test real flows**: Focus on what users actually do, not implementation details
+
+### Running E2E Tests
+
+```bash
+bun test:e2e              # Run all browsers
+bun playwright test --project=firefox  # Single browser (faster)
+bun test:e2e:ui           # Interactive UI mode
 ```
 
 ## Guidelines

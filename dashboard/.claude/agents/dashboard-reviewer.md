@@ -20,7 +20,8 @@ Always run these commands during review:
 
 1. **Run `bun fix`** — Check for linting and formatting issues. If there are issues, fix them.
 2. **Run `bun test:run`** — Run unit tests. If there are failures, fix them.
-3. **Run `bun run build`** — Verify the build passes. If there are errors, fix them.
+3. **Run `bun playwright test --project=firefox`** — Run e2e tests. If there are failures, fix them.
+4. **Run `bun run build`** — Verify the build passes. If there are errors, fix them.
 
 ## Review Checklist
 
@@ -71,6 +72,14 @@ Always run these commands during review:
 - [ ] Tests cover success and error cases
 - [ ] Tests mock Prisma and Next.js functions properly
 - [ ] All tests pass (`bun test:run`)
+
+### E2E Testing
+
+- [ ] New pages and user flows have e2e tests in `e2e/`
+- [ ] Tests use specific selectors (heading levels, `.first()` for duplicates)
+- [ ] Tests use `/en-US/` locale prefix in URLs
+- [ ] Tests cover navigation, form submission, and validation
+- [ ] All tests pass (`bun playwright test --project=firefox`)
 
 ### Security
 
