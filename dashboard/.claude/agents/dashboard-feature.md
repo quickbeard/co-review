@@ -65,7 +65,84 @@ Example - Dropdown trigger (Base UI style):
 Always run these commands after completing a feature:
 
 1. **Run `bun fix`** — Fix linting and formatting issues. If there are errors, fix them before proceeding.
-2. **Run `bun run build`** — Verify the build passes. If there are errors, fix them.
+2. **Run `bun test:run`** — Run unit tests. If there are failures, fix them.
+3. **Run `bun run build`** — Verify the build passes. If there are errors, fix them.
+
+## Unit Testing
+
+Use **Vitest** for unit testing. Write tests for server actions and utility functions.
+
+### When to Write Tests
+
+- **Always test**: Server actions (`lib/actions/*.ts`), utility functions, complex business logic
+- **Skip tests for**: Simple UI components, pages that just fetch and render data
+
+### Test Structure
+
+```
+tests/
+├── setup.ts                    # Global mocks (Prisma, Next.js)
+└── lib/
+    └── actions/
+        └── [feature].test.ts   # Tests for server actions
+```
+
+### Example Test for Server Actions
+
+```typescript
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { prisma } from "@/lib/db";
+import { createItem, getItems } from "@/lib/actions/items";
+
+// Mock Prisma
+vi.mock("@/lib/db", () => ({
+  prisma: {
+    item: {
+      findMany: vi.fn(),
+      create: vi.fn(),
+    },
+  },
+}));
+
+// Mock next/cache
+vi.mock("next/cache", () => ({
+  revalidatePath: vi.fn(),
+}));
+
+describe("Item Actions", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("should create an item with valid data", async () => {
+    vi.mocked(prisma.item.create).mockResolvedValue({ id: "1", name: "Test" });
+
+    const formData = new FormData();
+    formData.append("name", "Test");
+
+    const result = await createItem(formData);
+
+    expect(result.success).toBe(true);
+    expect(prisma.item.create).toHaveBeenCalled();
+  });
+
+  it("should return error for invalid data", async () => {
+    const formData = new FormData();
+    formData.append("name", ""); // Invalid - empty
+
+    const result = await createItem(formData);
+
+    expect(result.success).toBe(false);
+  });
+});
+```
+
+### Running Tests
+
+```bash
+bun test:run        # Single run
+bun test:coverage   # With coverage report
+```
 
 ## Guidelines
 
