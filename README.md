@@ -1,29 +1,37 @@
 # CoReview
 
-AI-powered code review tool that acts as an automated, senior-level reviewer for pull requests (PRs) in git platforms like GitHub and GitLab.
+AI-powered code review tool with a dashboard for managing git provider credentials. PR-Agent handles automated code reviews while the Dashboard provides a UI for configuration.
 
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    Docker Compose Stack                     │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐ │
-│  │  PostgreSQL │  │    Redis    │  │    PR-Agent API     │ │
-│  │    :5432    │  │    :6379    │  │       :3001         │ │
-│  └─────────────┘  └─────────────┘  └─────────────────────┘ │
-│         │                │                   │              │
-│         └────────────────┴───────────────────┘              │
-│                          │                                  │
-│                          ▼                                  │
-│              ┌───────────────────────┐                      │
-│              │   Dashboard (Next.js) │                      │
-│              │         :3000         │                      │
-│              └───────────────────────┘                      │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                      Docker Compose Stack                       │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌──────────────────────────────────────────────────────────┐  │
+│  │                      PostgreSQL                          │  │
+│  │                        :5432                             │  │
+│  └──────────────────────────────────────────────────────────┘  │
+│                 │                          │                    │
+│                 ▼                          ▼                    │
+│  ┌─────────────────────────┐  ┌─────────────────────────────┐  │
+│  │   Dashboard (Next.js)   │  │   PR-Agent (webhook server) │  │
+│  │         :3000           │  │      :3002 / :3003          │  │
+│  │                         │  │                             │  │
+│  │  - Manage git providers │  │  - GitHub/GitLab webhooks   │  │
+│  │  - Store credentials    │  │  - Reads credentials from   │  │
+│  │                         │  │    shared PostgreSQL        │  │
+│  └─────────────────────────┘  └─────────────────────────────┘  │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
 ```
+
+**How it works:**
+1. Users configure git provider credentials (GitHub, GitLab, etc.) via the Dashboard UI
+2. Credentials are stored in PostgreSQL
+3. PR-Agent reads credentials from the same database using `PostgresSecretProvider`
+4. When a PR/MR is opened, PR-Agent performs automated code review using the stored credentials
 
 ## Quick Start
 
@@ -39,10 +47,6 @@ AI-powered code review tool that acts as an automated, senior-level reviewer for
 ```toml
 [openai]
 key = "sk-..."  # or use other LLM providers
-
-[github]
-user_token = "ghp_..."
-deployment_type = "user"
 ```
 
 **Dashboard secrets** (`dashboard/.env`):
@@ -51,43 +55,40 @@ deployment_type = "user"
 DATABASE_URL="postgresql://postgres:postgres@localhost:5432/dashboard"
 ```
 
-### 2. Start All Services
+### 2. Start Services
 
 ```bash
+# Start dashboard and database
 docker compose up -d
-```
 
-> **Note**: Database migrations run automatically when the dashboard starts.
-
-### 3. Access the Dashboard
-
-Open [http://localhost:3000](http://localhost:3000)
-
-## Services
-
-| Service        | Port | Description         |
-| -------------- | ---- | ------------------- |
-| `dashboard`    | 3000 | Next.js web UI      |
-| `pr-agent-api` | 3001 | PR-Agent REST API   |
-| `postgres`     | 5432 | PostgreSQL database |
-| `redis`        | 6379 | Redis (job queue)   |
-
-### Optional Services (Profiles)
-
-Enable with `--profile <name>`:
-
-```bash
-# GitHub webhook handler
+# Enable GitHub webhook handler
 docker compose --profile github up -d
 
-# GitLab webhook handler
+# Or enable GitLab webhook handler
 docker compose --profile gitlab up -d
 ```
 
-| Profile  | Service           | Port | Description         |
-| -------- | ----------------- | ---- | ------------------- |
-| `github` | `pr-agent-github` | 3002 | GitHub App webhooks |
-| `gitlab` | `pr-agent-gitlab` | 3003 | GitLab webhooks     |
+### 3. Configure Git Providers
+
+1. Open [http://localhost:3000](http://localhost:3000)
+2. Navigate to Git Providers
+3. Add your GitHub/GitLab credentials
+
+## Services
+
+| Service    | Port | Description                    |
+| ---------- | ---- | ------------------------------ |
+| `postgres` | 5432 | PostgreSQL database            |
+| `dashboard`| 3000 | Next.js web UI for management  |
+
+### Optional Services (Profiles)
+
+Enable webhook handlers with `--profile <name>`:
+
+| Profile  | Service           | Port | Description              |
+| -------- | ----------------- | ---- | ------------------------ |
+| `github` | `pr-agent-github` | 3002 | GitHub App webhook handler |
+| `gitlab` | `pr-agent-gitlab` | 3003 | GitLab webhook handler     |
 
 ## Commands
 
@@ -95,11 +96,14 @@ docker compose --profile gitlab up -d
 # Start services
 docker compose up -d
 
+# Start with GitHub webhook handler
+docker compose --profile github up -d
+
 # View logs
 docker compose logs -f
 
 # View specific service logs
-docker compose logs -f dashboard pr-agent-api
+docker compose logs -f dashboard
 
 # Stop services
 docker compose down
@@ -119,31 +123,54 @@ docker compose up -d
 ```bash
 cd dashboard
 bun install
-bunx prisma generate
+bun prisma generate
+bun prisma migrate dev
 bun run dev
 ```
 
-### Run PR-Agent API Locally
+### Run Tests
+
+```bash
+cd dashboard
+
+# Unit tests
+bun test:run
+
+# E2E tests
+bun test:e2e
+```
+
+### Run PR-Agent Locally
 
 ```bash
 cd pr-agent
 pip install -r requirements.txt
-python -m pr_agent.servers.dashboard_api
+
+# GitHub webhook server
+python -m pr_agent.servers.github_app
+
+# GitLab webhook server
+python -m pr_agent.servers.gitlab_webhook
 ```
 
 ## Project Structure
 
 ```
 co-review/
-├── dashboard/           # Next.js frontend
-│   ├── app/            # App router pages
-│   ├── components/     # React components
-│   └── prisma/         # Database schema
-├── pr-agent/           # Python backend
+├── dashboard/              # Next.js frontend
+│   ├── app/               # App router pages
+│   ├── components/        # React components
+│   ├── lib/actions/       # Server actions
+│   ├── prisma/            # Database schema & migrations
+│   ├── tests/             # Unit tests (Vitest)
+│   └── e2e/               # E2E tests (Playwright)
+├── pr-agent/              # Python backend
 │   ├── pr_agent/
-│   │   ├── servers/    # FastAPI endpoints
-│   │   ├── tools/      # Review tools
-│   │   └── settings/   # Configuration
-│   └── docker/         # Dockerfiles
-└── docker-compose.yml  # Service orchestration
+│   │   ├── servers/       # Webhook handlers
+│   │   ├── tools/         # Review tools
+│   │   ├── secret_providers/
+│   │   │   └── postgres_secret_provider.py  # Reads from Dashboard DB
+│   │   └── settings/      # Configuration
+│   └── docker/            # Dockerfiles
+└── docker-compose.yml     # Service orchestration
 ```
