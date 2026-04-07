@@ -36,5 +36,87 @@
     "step2": "Thêm các kho lưu trữ bạn muốn theo dõi",
     "step3": "Cấu hình máy chủ LLM cho đánh giá bằng AI",
     "step4": "Thiết lập ngữ cảnh đánh giá để tùy chỉnh phân tích"
+  },
+  "gitProviders": {
+    "title": "Nhà cung cấp Git",
+    "description": "Quản lý các nhà cung cấp kho Git và cấu hình của chúng.",
+    "addProvider": "Thêm nhà cung cấp",
+    "backToList": "Quay lại danh sách",
+    "backToDetail": "Quay lại chi tiết",
+    "status": {
+      "active": "Hoạt động",
+      "inactive": "Không hoạt động"
+    },
+    "emptyState": {
+      "title": "Chưa có nhà cung cấp Git",
+      "description": "Bắt đầu bằng cách thêm nhà cung cấp git đầu tiên để kết nối các kho lưu trữ của bạn."
+    },
+    "table": {
+      "name": "Tên",
+      "type": "Loại",
+      "repositories": "Kho lưu trữ",
+      "status": "Trạng thái",
+      "actions": "Hành động"
+    },
+    "newProvider": {
+      "title": "Thêm nhà cung cấp Git",
+      "description": "Kết nối nhà cung cấp git mới để bắt đầu theo dõi kho lưu trữ."
+    },
+    "editProvider": {
+      "title": "Chỉnh sửa nhà cung cấp Git",
+      "description": "Cập nhật cấu hình cho nhà cung cấp git này."
+    },
+    "form": {
+      "type": "Loại nhà cung cấp",
+      "selectType": "Chọn loại nhà cung cấp",
+      "name": "Tên hiển thị",
+      "namePlaceholder": "Ví dụ: Tài khoản GitHub của tôi",
+      "nameHelp": "Tên thân thiện để nhận dạng nhà cung cấp này.",
+      "baseUrl": "URL cơ sở",
+      "baseUrlPlaceholder": "Ví dụ: https://gitlab.example.com",
+      "baseUrlHelp": "URL cơ sở cho các phiên bản tự lưu trữ. Để trống cho dịch vụ đám mây.",
+      "accessToken": "Token truy cập",
+      "accessTokenPlaceholder": "Nhập token truy cập cá nhân của bạn",
+      "accessTokenPlaceholderEdit": "Để trống để giữ token hiện tại",
+      "accessTokenHelp": "Token truy cập cá nhân có quyền truy cập kho lưu trữ.",
+      "webhookSecret": "Bí mật Webhook",
+      "webhookSecretPlaceholder": "Bí mật webhook tùy chọn",
+      "webhookSecretHelp": "Được sử dụng để xác minh các payload webhook từ nhà cung cấp.",
+      "create": "Tạo nhà cung cấp",
+      "update": "Cập nhật nhà cung cấp",
+      "saving": "Đang lưu...",
+      "cancel": "Hủy",
+      "errorGeneric": "Đã xảy ra lỗi. Vui lòng thử lại."
+    },
+    "actions": {
+      "openMenu": "Mở menu",
+      "viewDetails": "Xem chi tiết",
+      "edit": "Chỉnh sửa",
+      "delete": "Xóa",
+      "enable": "Bật",
+      "disable": "Tắt"
+    },
+    "deleteDialog": {
+      "title": "Xóa nhà cung cấp Git",
+      "description": "Bạn có chắc chắn muốn xóa \"{name}\"? Điều này cũng sẽ xóa tất cả các kho lưu trữ liên quan và lịch sử đánh giá của chúng. Hành động này không thể hoàn tác.",
+      "cancel": "Hủy",
+      "confirm": "Xóa",
+      "deleting": "Đang xóa..."
+    },
+    "detail": {
+      "configuration": "Cấu hình",
+      "configurationDescription": "Cài đặt và thông tin đăng nhập của nhà cung cấp.",
+      "repositories": "Kho lưu trữ",
+      "repositoriesDescription": "Các kho lưu trữ được kết nối với nhà cung cấp này.",
+      "noRepositories": "Chưa có kho lưu trữ nào được kết nối.",
+      "repoName": "Kho lưu trữ",
+      "repoStatus": "Trạng thái",
+      "createdAt": "Ngày tạo"
+    },
+    "error": {
+      "title": "Đã xảy ra lỗi",
+      "description": "Không thể tải các nhà cung cấp git. Vui lòng thử lại.",
+      "retry": "Thử lại"
+    }
   }
 }
