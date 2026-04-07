@@ -51,19 +51,15 @@ deployment_type = "user"
 DATABASE_URL="postgresql://postgres:postgres@localhost:5432/dashboard"
 ```
 
-### 2. Run Database Migrations
-
-```bash
-docker compose --profile migrate up migrate
-```
-
-### 3. Start All Services
+### 2. Start All Services
 
 ```bash
 docker compose up -d
 ```
 
-### 4. Access the Dashboard
+> **Note**: Database migrations run automatically when the dashboard starts.
+
+### 3. Access the Dashboard
 
 Open [http://localhost:3000](http://localhost:3000)
 
