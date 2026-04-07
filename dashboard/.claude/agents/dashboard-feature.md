@@ -66,7 +66,7 @@ Always run these commands after completing a feature:
 
 1. **Run `bun fix`** — Fix linting and formatting issues. If there are errors, fix them before proceeding.
 2. **Run `bun test:run`** — Run unit tests. If there are failures, fix them.
-3. **Run `bun playwright test --project=firefox`** — Run e2e tests on Firefox. If there are failures, fix them.
+3. **Run `bun test:e2e`** — Run e2e tests. If there are failures, fix them.
 4. **Run `bun run build`** — Verify the build passes. If there are errors, fix them.
 
 ## Unit Testing
@@ -215,9 +215,8 @@ test.describe("Feature Name", () => {
 ### Running E2E Tests
 
 ```bash
-bun test:e2e              # Run all browsers
-bun playwright test --project=firefox  # Single browser (faster)
-bun test:e2e:ui           # Interactive UI mode
+bun test:e2e      # Run e2e tests (Firefox only, configured in playwright.config.ts)
+bun test:e2e:ui   # Interactive UI mode
 ```
 
 ## Guidelines

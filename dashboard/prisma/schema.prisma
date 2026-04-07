@@ -25,6 +25,11 @@ enum GitProviderType {
   gerrit
 }
 
+enum GitHubDeploymentType {
+  user
+  app
+}
+
 
 // =============================================================================
 // Core Models
@@ -40,18 +45,22 @@ model Organization {
 }
 
 model GitProvider {
-  id             String          @id @default(cuid())
+  id             String               @id @default(cuid())
   type           GitProviderType
   name           String
-  baseUrl        String?         // For self-hosted instances (GitLab, Gitea, etc.)
-  accessToken    String          // Encrypted in application layer
+  baseUrl        String?              // For self-hosted instances (GitLab, Gitea, etc.)
+  accessToken    String?              // Encrypted in application layer - used for non-GitHub or GitHub user deployment
   webhookSecret  String?
-  isActive       Boolean         @default(true)
+  isActive       Boolean              @default(true)
+  // GitHub-specific fields
+  deploymentType GitHubDeploymentType? // Only for GitHub: "user" or "app"
+  appId          String?              // GitHub App ID (only for GitHub App deployment)
+  privateKey     String?              // GitHub App private key (only for GitHub App deployment)
   organizationId String
-  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   repositories   Repository[]
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
 
   @@unique([organizationId, type, name])
 }
