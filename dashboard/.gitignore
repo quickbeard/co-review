@@ -9,10 +9,10 @@ node_modules
 coverage
 
 # playwright
-test-results/
-playwright-report/
-blob-report/
-playwright/.auth/
+test-results
+playwright-report
+blob-report
+playwright/.auth
 
 # database
 prisma/db.sqlite
