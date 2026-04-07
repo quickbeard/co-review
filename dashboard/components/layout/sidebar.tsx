@@ -69,7 +69,9 @@ export function Sidebar({ collapsed, onToggle, className }: SidebarProps) {
           onClick={onToggle}
           className={cn(collapsed && "mx-auto")}
           aria-label={
-            collapsed ? dict.sidebar.expandSidebar : dict.sidebar.collapseSidebar
+            collapsed
+              ? dict.sidebar.expandSidebar
+              : dict.sidebar.collapseSidebar
           }
         >
           {collapsed ? (
