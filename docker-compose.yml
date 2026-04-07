@@ -132,25 +132,6 @@ services:
       retries: 3
       start_period: 30s
 
-  # =============================================================================
-  # Database Migrations (run once)
-  # =============================================================================
-
-  migrate:
-    build:
-      context: ./dashboard
-      dockerfile: Dockerfile
-      target: builder
-    container_name: co-review-migrate
-    command: bunx prisma migrate deploy
-    environment:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/dashboard
-    depends_on:
-      postgres:
-        condition: service_healthy
-    profiles:
-      - migrate
-
 volumes:
   postgres_data:
   redis_data:
