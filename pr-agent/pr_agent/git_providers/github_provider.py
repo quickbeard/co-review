@@ -827,29 +827,65 @@ class GithubProvider(GitProvider):
     def _get_github_client(self):
         self.deployment_type = get_settings().get("GITHUB.DEPLOYMENT_TYPE", "user")
         self.auth = None
-        if self.deployment_type == 'app':
-            try:
-                private_key = get_settings().github.private_key
-                app_id = get_settings().github.app_id
-            except AttributeError as e:
-                raise ValueError("GitHub app ID and private key are required when using GitHub app deployment") from e
-            if not self.installation_id:
-                raise ValueError("GitHub app installation ID is required when using GitHub app deployment")
-            auth = AppAuthentication(app_id=app_id, private_key=private_key,
-                                     installation_id=self.installation_id)
-            self.auth = auth
-        elif self.deployment_type == 'user':
-            try:
-                token = get_settings().github.user_token
-            except AttributeError as e:
-                raise ValueError(
-                    "GitHub token is required when using user deployment. See: "
-                    "https://github.com/Codium-ai/pr-agent#method-2-run-from-source") from e
-            self.auth = Auth.Token(token)
+
+        # Check if using postgres secret provider for credentials
+        secret_provider = get_settings().get("CONFIG.SECRET_PROVIDER", "")
+        if secret_provider == "postgres":
+            credentials = self._get_credentials_from_postgres()
+            if credentials:
+                token = credentials.get('token')
+                if token:
+                    # Override base_url if provided by postgres
+                    if credentials.get('base_url'):
+                        self.base_url = credentials['base_url'].rstrip("/")
+                        self.base_url_html = self.base_url.split("api/")[0].rstrip("/") if "api/" in self.base_url else "https://github.com"
+                    self.auth = Auth.Token(token)
+                    get_logger().info("Using GitHub credentials from PostgreSQL secret provider")
+
+        # Fall back to traditional authentication if postgres didn't provide credentials
+        if self.auth is None:
+            if self.deployment_type == 'app':
+                try:
+                    private_key = get_settings().github.private_key
+                    app_id = get_settings().github.app_id
+                except AttributeError as e:
+                    raise ValueError("GitHub app ID and private key are required when using GitHub app deployment") from e
+                if not self.installation_id:
+                    raise ValueError("GitHub app installation ID is required when using GitHub app deployment")
+                auth = AppAuthentication(app_id=app_id, private_key=private_key,
+                                         installation_id=self.installation_id)
+                self.auth = auth
+            elif self.deployment_type == 'user':
+                try:
+                    token = get_settings().github.user_token
+                except AttributeError as e:
+                    raise ValueError(
+                        "GitHub token is required when using user deployment. See: "
+                        "https://github.com/Codium-ai/pr-agent#method-2-run-from-source") from e
+                self.auth = Auth.Token(token)
+
         if self.auth:
             return Github(auth=self.auth, base_url=self.base_url)
         else:
             raise ValueError("Could not authenticate to GitHub")
+
+    def _get_credentials_from_postgres(self):
+        """
+        Fetch GitHub credentials from PostgreSQL secret provider.
+
+        Returns:
+            dict with 'token', 'base_url', 'webhook_secret' or None if unavailable.
+        """
+        try:
+            from pr_agent.secret_providers import get_secret_provider
+            provider = get_secret_provider()
+            if provider and hasattr(provider, 'get_git_credentials'):
+                # Try to get credentials for the specific repo if available
+                repo_full_name = getattr(self, 'repo', None)
+                return provider.get_git_credentials('github', repo_full_name)
+        except Exception as e:
+            get_logger().warning(f"Failed to get GitHub credentials from postgres: {e}")
+        return None
 
     def _get_repo(self):
         if hasattr(self, 'repo_obj') and \
