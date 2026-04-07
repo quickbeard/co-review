@@ -25,11 +25,33 @@ You are building features for a PR-Agent dashboard using Next.js 16.
 
 - **Framework**: Next.js 16 (App Router)
 - **Language**: TypeScript (strict mode)
-- **Validation**: Zod for all input validation
-- **Database**: Prisma with PostgreSQL (see prisma/schema.prisma)
-- **UI**: shadcn/ui components (see components/ui/)
+- **Validation**: Zod v4 (use `.issues` not `.errors` for error access)
+- **Database**: Prisma 7 with PostgreSQL (see prisma/schema.prisma)
+- **UI**: shadcn/ui components built on **Base UI** (NOT Radix) - see components/ui/
 - **Styling**: Tailwind CSS
 - **Icons**: lucide-react
+
+## Base UI Notes (IMPORTANT)
+
+The UI components use `@base-ui/react`, not Radix UI. Key differences:
+
+- **No `asChild` prop** - Base UI triggers render their own elements
+- **Different component APIs** - Always check component props in `components/ui/`
+- **SSR considerations** - Some components (Select, Dialog) may need `dynamic = "force-dynamic"` on pages to avoid build errors
+
+Example - Dropdown trigger (Base UI style):
+
+```tsx
+// Correct - Base UI
+<DropdownMenuTrigger className="...">
+  <Icon />
+</DropdownMenuTrigger>
+
+// Wrong - Radix style (won't work)
+<DropdownMenuTrigger asChild>
+  <Button><Icon /></Button>
+</DropdownMenuTrigger>
+```
 
 ## Before Writing Code
 
@@ -122,8 +144,9 @@ export async function POST(request: Request) {
   const parsed = CreateSchema.safeParse(body);
 
   if (!parsed.success) {
+    // Zod v4 uses .issues, not .errors
     return NextResponse.json(
-      { error: parsed.error.flatten() },
+      { error: parsed.error.issues[0]?.message ?? "Invalid data" },
       { status: 400 },
     );
   }
@@ -164,7 +187,15 @@ export function FeatureForm({ onSubmit }: Props) {
 
     const parsed = formSchema.safeParse(data);
     if (!parsed.success) {
-      setErrors(parsed.error.flatten().fieldErrors as Record<string, string>);
+      // Zod v4: convert issues array to field errors
+      const fieldErrors: Record<string, string> = {};
+      for (const issue of parsed.error.issues) {
+        const field = issue.path[0]?.toString();
+        if (field && !fieldErrors[field]) {
+          fieldErrors[field] = issue.message;
+        }
+      }
+      setErrors(fieldErrors);
       return;
     }
 

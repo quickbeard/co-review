@@ -36,5 +36,87 @@
     "step2": "Add repositories you want to track",
     "step3": "Configure an LLM server for AI-powered reviews",
     "step4": "Set up review contexts to customize analysis"
+  },
+  "gitProviders": {
+    "title": "Git Providers",
+    "description": "Manage your git repository providers and their configurations.",
+    "addProvider": "Add Provider",
+    "backToList": "Back to Git Providers",
+    "backToDetail": "Back to Provider",
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive"
+    },
+    "emptyState": {
+      "title": "No Git Providers",
+      "description": "Get started by adding your first git provider to connect your repositories."
+    },
+    "table": {
+      "name": "Name",
+      "type": "Type",
+      "repositories": "Repositories",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "newProvider": {
+      "title": "Add Git Provider",
+      "description": "Connect a new git provider to start tracking repositories."
+    },
+    "editProvider": {
+      "title": "Edit Git Provider",
+      "description": "Update the configuration for this git provider."
+    },
+    "form": {
+      "type": "Provider Type",
+      "selectType": "Select a provider type",
+      "name": "Display Name",
+      "namePlaceholder": "e.g., My GitHub Account",
+      "nameHelp": "A friendly name to identify this provider.",
+      "baseUrl": "Base URL",
+      "baseUrlPlaceholder": "e.g., https://gitlab.example.com",
+      "baseUrlHelp": "The base URL for self-hosted instances. Leave empty for cloud-hosted services.",
+      "accessToken": "Access Token",
+      "accessTokenPlaceholder": "Enter your personal access token",
+      "accessTokenPlaceholderEdit": "Leave empty to keep current token",
+      "accessTokenHelp": "A personal access token with repository access permissions.",
+      "webhookSecret": "Webhook Secret",
+      "webhookSecretPlaceholder": "Optional webhook secret",
+      "webhookSecretHelp": "Used to verify webhook payloads from the provider.",
+      "create": "Create Provider",
+      "update": "Update Provider",
+      "saving": "Saving...",
+      "cancel": "Cancel",
+      "errorGeneric": "Something went wrong. Please try again."
+    },
+    "actions": {
+      "openMenu": "Open menu",
+      "viewDetails": "View Details",
+      "edit": "Edit",
+      "delete": "Delete",
+      "enable": "Enable",
+      "disable": "Disable"
+    },
+    "deleteDialog": {
+      "title": "Delete Git Provider",
+      "description": "Are you sure you want to delete \"{name}\"? This will also delete all associated repositories and their review history. This action cannot be undone.",
+      "cancel": "Cancel",
+      "confirm": "Delete",
+      "deleting": "Deleting..."
+    },
+    "detail": {
+      "configuration": "Configuration",
+      "configurationDescription": "Provider settings and credentials.",
+      "repositories": "Repositories",
+      "repositoriesDescription": "Repositories connected to this provider.",
+      "noRepositories": "No repositories connected yet.",
+      "repoName": "Repository",
+      "repoStatus": "Status",
+      "createdAt": "Created"
+    },
+    "error": {
+      "title": "Something went wrong",
+      "description": "Failed to load git providers. Please try again.",
+      "retry": "Try Again"
+    }
   }
 }
