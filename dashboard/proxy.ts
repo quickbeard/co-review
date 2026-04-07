@@ -11,7 +11,15 @@ function getLocale(request: NextRequest): string {
   });
 
   const languages = new Negotiator({ headers }).languages();
-  return match(languages, [...locales], defaultLocale);
+
+  // Filter out invalid language tags like "*" that intl-localematcher can't handle
+  const validLanguages = languages.filter((lang) => lang !== "*");
+
+  if (validLanguages.length === 0) {
+    return defaultLocale;
+  }
+
+  return match(validLanguages, [...locales], defaultLocale);
 }
 
 export function proxy(request: NextRequest) {
