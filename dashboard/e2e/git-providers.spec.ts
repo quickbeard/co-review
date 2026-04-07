@@ -12,7 +12,10 @@ test.describe("Git Providers", () => {
   test("should navigate to add provider page", async ({ page }) => {
     await page.goto("/en-US/git-providers");
 
-    await page.getByRole("link", { name: /add provider/i }).first().click();
+    await page
+      .getByRole("link", { name: /add provider/i })
+      .first()
+      .click();
 
     await expect(page).toHaveURL(/\/git-providers\/new/);
     await expect(
