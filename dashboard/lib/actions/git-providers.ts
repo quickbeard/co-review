@@ -4,7 +4,10 @@ import { prisma } from "@/lib/db";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import type { GitProviderType } from "@/generated/prisma/client";
+import type {
+  GitProviderType,
+  GitHubDeploymentType,
+} from "@/generated/prisma/client";
 
 // =============================================================================
 // Schemas
@@ -19,38 +22,99 @@ const gitProviderTypeValues = [
   "gerrit",
 ] as const;
 
-const createGitProviderSchema = z.object({
+const gitHubDeploymentTypeValues = ["user", "app"] as const;
+
+// Helper to handle FormData null values
+const optionalString = z
+  .string()
+  .optional()
+  .nullable()
+  .transform((val) => val || null);
+
+const optionalUrl = z
+  .string()
+  .url("Must be a valid URL")
+  .optional()
+  .nullable()
+  .or(z.literal(""))
+  .transform((val) => val || null);
+
+// Base schema for common fields
+const baseGitProviderSchema = z.object({
   type: z.enum(gitProviderTypeValues),
   name: z.string().min(1, "Name is required").max(100),
-  baseUrl: z
-    .string()
-    .url("Must be a valid URL")
+  baseUrl: optionalUrl,
+  webhookSecret: optionalString,
+  // GitHub-specific fields
+  deploymentType: z
+    .enum(gitHubDeploymentTypeValues)
     .optional()
-    .or(z.literal(""))
+    .nullable()
     .transform((val) => val || null),
-  accessToken: z.string().min(1, "Access token is required"),
-  webhookSecret: z
-    .string()
-    .optional()
-    .transform((val) => val || null),
+  appId: optionalString,
+  privateKey: optionalString,
+  accessToken: optionalString,
 });
 
-const updateGitProviderSchema = z.object({
-  id: z.string().min(1),
-  type: z.enum(gitProviderTypeValues),
-  name: z.string().min(1, "Name is required").max(100),
-  baseUrl: z
-    .string()
-    .url("Must be a valid URL")
-    .optional()
-    .or(z.literal(""))
-    .transform((val) => val || null),
-  accessToken: z.string().optional(),
-  webhookSecret: z
-    .string()
-    .optional()
-    .transform((val) => val || null),
-});
+// Custom validation for create schema
+const createGitProviderSchema = baseGitProviderSchema.superRefine(
+  (data, ctx) => {
+    if (data.type === "github") {
+      // GitHub requires deploymentType
+      if (!data.deploymentType) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Deployment type is required for GitHub",
+          path: ["deploymentType"],
+        });
+        return;
+      }
+
+      if (data.deploymentType === "user") {
+        // User deployment requires accessToken
+        if (!data.accessToken) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Personal access token is required",
+            path: ["accessToken"],
+          });
+        }
+      } else if (data.deploymentType === "app") {
+        // App deployment requires appId and privateKey
+        if (!data.appId) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "GitHub App ID is required",
+            path: ["appId"],
+          });
+        }
+        if (!data.privateKey) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Private key is required",
+            path: ["privateKey"],
+          });
+        }
+      }
+    } else {
+      // Non-GitHub providers require accessToken
+      if (!data.accessToken) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Access token is required",
+          path: ["accessToken"],
+        });
+      }
+    }
+  },
+);
+
+// Update schema - tokens are optional (keep existing if not provided)
+const updateGitProviderSchema = z
+  .object({
+    id: z.string().min(1),
+  })
+  .merge(baseGitProviderSchema);
 
 // =============================================================================
 // Types
@@ -122,6 +186,9 @@ export async function createGitProvider(
     baseUrl: formData.get("baseUrl"),
     accessToken: formData.get("accessToken"),
     webhookSecret: formData.get("webhookSecret"),
+    deploymentType: formData.get("deploymentType"),
+    appId: formData.get("appId"),
+    privateKey: formData.get("privateKey"),
   };
 
   const parsed = createGitProviderSchema.safeParse(rawData);
@@ -151,6 +218,10 @@ export async function createGitProvider(
         baseUrl: parsed.data.baseUrl,
         accessToken: parsed.data.accessToken,
         webhookSecret: parsed.data.webhookSecret,
+        deploymentType: parsed.data
+          .deploymentType as GitHubDeploymentType | null,
+        appId: parsed.data.appId,
+        privateKey: parsed.data.privateKey,
         organizationId: org.id,
       },
     });
@@ -184,6 +255,9 @@ export async function updateGitProvider(
     baseUrl: formData.get("baseUrl"),
     accessToken: formData.get("accessToken"),
     webhookSecret: formData.get("webhookSecret"),
+    deploymentType: formData.get("deploymentType"),
+    appId: formData.get("appId"),
+    privateKey: formData.get("privateKey"),
   };
 
   const parsed = updateGitProviderSchema.safeParse(rawData);
@@ -209,11 +283,33 @@ export async function updateGitProvider(
       name: parsed.data.name,
       baseUrl: parsed.data.baseUrl,
       webhookSecret: parsed.data.webhookSecret,
+      deploymentType: parsed.data.deploymentType as GitHubDeploymentType | null,
     };
 
     // Only update access token if provided
     if (parsed.data.accessToken) {
       updateData.accessToken = parsed.data.accessToken;
+    }
+
+    // Only update appId if provided
+    if (parsed.data.appId) {
+      updateData.appId = parsed.data.appId;
+    }
+
+    // Only update privateKey if provided
+    if (parsed.data.privateKey) {
+      updateData.privateKey = parsed.data.privateKey;
+    }
+
+    // Clear GitHub-specific fields when switching away from GitHub or changing deployment type
+    if (parsed.data.type !== "github") {
+      updateData.deploymentType = null;
+      updateData.appId = null;
+      updateData.privateKey = null;
+    } else if (parsed.data.deploymentType === "user") {
+      // Clear app fields when switching to user deployment
+      updateData.appId = null;
+      updateData.privateKey = null;
     }
 
     await prisma.gitProvider.update({

@@ -48,6 +48,9 @@ const mockGitProvider = {
   webhookSecret: null,
   isActive: true,
   organizationId: "org-1",
+  deploymentType: "user" as const,
+  appId: null,
+  privateKey: null,
   createdAt: new Date(),
   updatedAt: new Date(),
 };
@@ -140,7 +143,7 @@ describe("Git Provider Actions", () => {
   });
 
   describe("createGitProvider", () => {
-    it("should create a git provider with valid data", async () => {
+    it("should create a GitHub provider with user deployment type", async () => {
       vi.mocked(prisma.gitProvider.create).mockResolvedValue(
         mockGitProvider as never,
       );
@@ -151,6 +154,7 @@ describe("Git Provider Actions", () => {
         baseUrl: "",
         accessToken: "ghp_xxx",
         webhookSecret: "",
+        deploymentType: "user",
       });
 
       const result = await createGitProvider(formData);
@@ -166,9 +170,59 @@ describe("Git Provider Actions", () => {
           baseUrl: null,
           accessToken: "ghp_xxx",
           webhookSecret: null,
+          deploymentType: "user",
+          appId: null,
+          privateKey: null,
           organizationId: mockOrganization.id,
         },
       });
+    });
+
+    it("should create a GitHub provider with app deployment type", async () => {
+      vi.mocked(prisma.gitProvider.create).mockResolvedValue({
+        ...mockGitProvider,
+        deploymentType: "app",
+        accessToken: null,
+        appId: "123456",
+        privateKey:
+          "-----BEGIN RSA PRIVATE KEY-----\ntest\n-----END RSA PRIVATE KEY-----",
+      } as never);
+
+      const formData = createFormData({
+        type: "github",
+        name: "My GitHub App",
+        baseUrl: "",
+        deploymentType: "app",
+        appId: "123456",
+        privateKey:
+          "-----BEGIN RSA PRIVATE KEY-----\ntest\n-----END RSA PRIVATE KEY-----",
+        webhookSecret: "secret123",
+      });
+
+      const result = await createGitProvider(formData);
+
+      expect(result.success).toBe(true);
+    });
+
+    it("should create a non-GitHub provider with access token", async () => {
+      vi.mocked(prisma.gitProvider.create).mockResolvedValue({
+        ...mockGitProvider,
+        type: "gitlab",
+        accessToken: "glpat_xxx",
+        deploymentType: null,
+      } as never);
+
+      const formData = createFormData({
+        type: "gitlab",
+        name: "My GitLab",
+        baseUrl: "",
+        accessToken: "glpat_xxx",
+        webhookSecret: "",
+      });
+
+      const result = await createGitProvider(formData);
+
+      expect(result.success).toBe(true);
     });
 
     it("should return error for missing name", async () => {
@@ -176,6 +230,7 @@ describe("Git Provider Actions", () => {
         type: "github",
         name: "",
         accessToken: "ghp_xxx",
+        deploymentType: "user",
       });
 
       const result = await createGitProvider(formData);
@@ -186,10 +241,45 @@ describe("Git Provider Actions", () => {
       }
     });
 
-    it("should return error for missing access token", async () => {
+    it("should return error for missing access token on GitHub user deployment", async () => {
       const formData = createFormData({
         type: "github",
         name: "My GitHub",
+        accessToken: "",
+        deploymentType: "user",
+      });
+
+      const result = await createGitProvider(formData);
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(result.fieldErrors?.accessToken).toBeDefined();
+      }
+    });
+
+    it("should return error for missing app fields on GitHub app deployment", async () => {
+      const formData = createFormData({
+        type: "github",
+        name: "My GitHub App",
+        deploymentType: "app",
+        appId: "",
+        privateKey: "",
+      });
+
+      const result = await createGitProvider(formData);
+
+      expect(result.success).toBe(false);
+      if (!result.success) {
+        expect(
+          result.fieldErrors?.appId || result.fieldErrors?.privateKey,
+        ).toBeDefined();
+      }
+    });
+
+    it("should return error for missing access token on non-GitHub provider", async () => {
+      const formData = createFormData({
+        type: "gitlab",
+        name: "My GitLab",
         accessToken: "",
       });
 
@@ -228,6 +318,7 @@ describe("Git Provider Actions", () => {
         baseUrl: "",
         accessToken: "ghp_xxx",
         webhookSecret: "",
+        deploymentType: "user",
       });
 
       const result = await createGitProvider(formData);
@@ -252,6 +343,7 @@ describe("Git Provider Actions", () => {
         baseUrl: "",
         accessToken: "",
         webhookSecret: "",
+        deploymentType: "user",
       });
 
       const result = await updateGitProvider(formData);
@@ -264,6 +356,9 @@ describe("Git Provider Actions", () => {
           name: "Updated GitHub",
           baseUrl: null,
           webhookSecret: null,
+          deploymentType: "user",
+          appId: null,
+          privateKey: null,
         },
       });
     });
@@ -280,6 +375,7 @@ describe("Git Provider Actions", () => {
         baseUrl: "",
         accessToken: "new_token",
         webhookSecret: "",
+        deploymentType: "user",
       });
 
       const result = await updateGitProvider(formData);
@@ -293,10 +389,68 @@ describe("Git Provider Actions", () => {
       });
     });
 
+    it("should clear app fields when switching to user deployment", async () => {
+      vi.mocked(prisma.gitProvider.update).mockResolvedValue(
+        mockGitProvider as never,
+      );
+
+      const formData = createFormData({
+        id: "provider-1",
+        type: "github",
+        name: "My GitHub",
+        baseUrl: "",
+        accessToken: "ghp_xxx",
+        webhookSecret: "",
+        deploymentType: "user",
+      });
+
+      const result = await updateGitProvider(formData);
+
+      expect(result.success).toBe(true);
+      expect(prisma.gitProvider.update).toHaveBeenCalledWith({
+        where: { id: "provider-1" },
+        data: expect.objectContaining({
+          deploymentType: "user",
+          appId: null,
+          privateKey: null,
+        }),
+      });
+    });
+
+    it("should clear GitHub fields when switching to non-GitHub provider", async () => {
+      vi.mocked(prisma.gitProvider.update).mockResolvedValue({
+        ...mockGitProvider,
+        type: "gitlab",
+        deploymentType: null,
+      } as never);
+
+      const formData = createFormData({
+        id: "provider-1",
+        type: "gitlab",
+        name: "My GitLab",
+        baseUrl: "",
+        accessToken: "glpat_xxx",
+        webhookSecret: "",
+      });
+
+      const result = await updateGitProvider(formData);
+
+      expect(result.success).toBe(true);
+      expect(prisma.gitProvider.update).toHaveBeenCalledWith({
+        where: { id: "provider-1" },
+        data: expect.objectContaining({
+          deploymentType: null,
+          appId: null,
+          privateKey: null,
+        }),
+      });
+    });
+
     it("should return error for missing id", async () => {
       const formData = createFormData({
         type: "github",
         name: "My GitHub",
+        deploymentType: "user",
       });
 
       const result = await updateGitProvider(formData);

@@ -26,6 +26,17 @@ export default async function EditGitProviderPage({
     notFound();
   }
 
+  // Extract only the fields needed by the form
+  const formProvider = {
+    id: provider.id,
+    type: provider.type,
+    name: provider.name,
+    baseUrl: provider.baseUrl,
+    webhookSecret: provider.webhookSecret,
+    deploymentType: provider.deploymentType,
+    appId: provider.appId,
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -45,7 +56,7 @@ export default async function EditGitProviderPage({
       </div>
 
       <div className="max-w-xl rounded-lg border border-border bg-background p-6">
-        <GitProviderForm provider={provider} lang={lang} />
+        <GitProviderForm provider={formProvider} lang={lang} />
       </div>
     </div>
   );

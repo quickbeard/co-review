@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -17,7 +19,10 @@ import {
   createGitProvider,
   updateGitProvider,
 } from "@/lib/actions/git-providers";
-import type { GitProviderType } from "@/generated/prisma/client";
+import type {
+  GitProviderType,
+  GitHubDeploymentType,
+} from "@/generated/prisma/client";
 
 interface GitProviderFormProps {
   provider?: {
@@ -26,6 +31,8 @@ interface GitProviderFormProps {
     name: string;
     baseUrl: string | null;
     webhookSecret: string | null;
+    deploymentType: GitHubDeploymentType | null;
+    appId: string | null;
   };
   lang: string;
 }
@@ -58,8 +65,14 @@ export function GitProviderForm({ provider, lang }: GitProviderFormProps) {
   const [selectedType, setSelectedType] = useState<GitProviderType>(
     provider?.type ?? "github",
   );
+  const [deploymentType, setDeploymentType] = useState<GitHubDeploymentType>(
+    provider?.deploymentType ?? "user",
+  );
+  const [showAccessToken, setShowAccessToken] = useState(false);
+  const [showWebhookSecret, setShowWebhookSecret] = useState(false);
 
   const showBaseUrl = selfHostedProviders.includes(selectedType);
+  const isGitHub = selectedType === "github";
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -102,7 +115,10 @@ export function GitProviderForm({ provider, lang }: GitProviderFormProps) {
       )}
 
       <div className="space-y-2">
-        <Label htmlFor="type">{dict.gitProviders.form.type}</Label>
+        <Label htmlFor="type">
+          {dict.gitProviders.form.type}
+          <span className="ml-1 text-destructive">*</span>
+        </Label>
         <Select
           name="type"
           value={selectedType}
@@ -125,13 +141,17 @@ export function GitProviderForm({ provider, lang }: GitProviderFormProps) {
       </div>
 
       <div className="space-y-2">
-        <Label htmlFor="name">{dict.gitProviders.form.name}</Label>
+        <Label htmlFor="name">
+          {dict.gitProviders.form.name}
+          <span className="ml-1 text-destructive">*</span>
+        </Label>
         <Input
           id="name"
           name="name"
           defaultValue={provider?.name}
           placeholder={dict.gitProviders.form.namePlaceholder}
           aria-invalid={!!errors.name}
+          required
         />
         {errors.name && (
           <p className="text-sm text-destructive">{errors.name}</p>
@@ -143,7 +163,12 @@ export function GitProviderForm({ provider, lang }: GitProviderFormProps) {
 
       {showBaseUrl && (
         <div className="space-y-2">
-          <Label htmlFor="baseUrl">{dict.gitProviders.form.baseUrl}</Label>
+          <Label htmlFor="baseUrl">
+            {dict.gitProviders.form.baseUrl}
+            <span className="ml-2 text-sm text-muted-foreground">
+              ({dict.gitProviders.form.optional})
+            </span>
+          </Label>
           <Input
             id="baseUrl"
             name="baseUrl"
@@ -161,42 +186,193 @@ export function GitProviderForm({ provider, lang }: GitProviderFormProps) {
         </div>
       )}
 
-      <div className="space-y-2">
-        <Label htmlFor="accessToken">
-          {dict.gitProviders.form.accessToken}
-        </Label>
-        <Input
-          id="accessToken"
-          name="accessToken"
-          type="password"
-          placeholder={
-            isEdit
-              ? dict.gitProviders.form.accessTokenPlaceholderEdit
-              : dict.gitProviders.form.accessTokenPlaceholder
-          }
-          required={!isEdit}
-          aria-invalid={!!errors.accessToken}
-        />
-        {errors.accessToken && (
-          <p className="text-sm text-destructive">{errors.accessToken}</p>
-        )}
-        <p className="text-sm text-muted-foreground">
-          {dict.gitProviders.form.accessTokenHelp}
-        </p>
-      </div>
+      {/* GitHub Deployment Type Radio Buttons */}
+      {isGitHub && (
+        <div className="space-y-3">
+          <Label>
+            {dict.gitProviders.form.deploymentType}
+            <span className="ml-1 text-destructive">*</span>
+          </Label>
+          <div className="flex gap-6">
+            <label className="flex cursor-pointer items-center gap-2">
+              <input
+                type="radio"
+                name="deploymentType"
+                value="user"
+                checked={deploymentType === "user"}
+                onChange={(e) =>
+                  setDeploymentType(e.target.value as GitHubDeploymentType)
+                }
+                className="h-4 w-4 border-input text-primary focus:ring-ring"
+              />
+              <span className="text-sm">
+                {dict.gitProviders.form.deploymentTypeUser}
+              </span>
+            </label>
+            <label className="flex cursor-pointer items-center gap-2">
+              <input
+                type="radio"
+                name="deploymentType"
+                value="app"
+                checked={deploymentType === "app"}
+                onChange={(e) =>
+                  setDeploymentType(e.target.value as GitHubDeploymentType)
+                }
+                className="h-4 w-4 border-input text-primary focus:ring-ring"
+              />
+              <span className="text-sm">
+                {dict.gitProviders.form.deploymentTypeApp}
+              </span>
+            </label>
+          </div>
+          {errors.deploymentType && (
+            <p className="text-sm text-destructive">{errors.deploymentType}</p>
+          )}
+          <p className="text-sm text-muted-foreground">
+            {dict.gitProviders.form.deploymentTypeHelp}
+          </p>
+        </div>
+      )}
+
+      {/* Personal Access Token - for non-GitHub or GitHub user deployment */}
+      {(!isGitHub || deploymentType === "user") && (
+        <div className="space-y-2">
+          <Label htmlFor="accessToken">
+            {isGitHub
+              ? dict.gitProviders.form.userToken
+              : dict.gitProviders.form.accessToken}
+            <span className="ml-1 text-destructive">*</span>
+          </Label>
+          <div className="relative">
+            <Input
+              id="accessToken"
+              name="accessToken"
+              type={showAccessToken ? "text" : "password"}
+              placeholder={
+                isEdit
+                  ? dict.gitProviders.form.accessTokenPlaceholderEdit
+                  : isGitHub
+                    ? dict.gitProviders.form.userTokenPlaceholder
+                    : dict.gitProviders.form.accessTokenPlaceholder
+              }
+              required={!isEdit}
+              aria-invalid={!!errors.accessToken}
+              className="pr-10"
+            />
+            <button
+              type="button"
+              onClick={() => setShowAccessToken(!showAccessToken)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+              aria-label={
+                showAccessToken
+                  ? dict.gitProviders.form.hideToken
+                  : dict.gitProviders.form.showToken
+              }
+            >
+              {showAccessToken ? (
+                <EyeOff className="h-4 w-4" />
+              ) : (
+                <Eye className="h-4 w-4" />
+              )}
+            </button>
+          </div>
+          {errors.accessToken && (
+            <p className="text-sm text-destructive">{errors.accessToken}</p>
+          )}
+          <p className="text-sm text-muted-foreground">
+            {isGitHub
+              ? dict.gitProviders.form.userTokenHelp
+              : dict.gitProviders.form.accessTokenHelp}
+          </p>
+        </div>
+      )}
+
+      {/* GitHub App Fields */}
+      {isGitHub && deploymentType === "app" && (
+        <>
+          <div className="space-y-2">
+            <Label htmlFor="appId">
+              {dict.gitProviders.form.appId}
+              <span className="ml-1 text-destructive">*</span>
+            </Label>
+            <Input
+              id="appId"
+              name="appId"
+              defaultValue={provider?.appId ?? ""}
+              placeholder={dict.gitProviders.form.appIdPlaceholder}
+              required={!isEdit}
+              aria-invalid={!!errors.appId}
+            />
+            {errors.appId && (
+              <p className="text-sm text-destructive">{errors.appId}</p>
+            )}
+            <p className="text-sm text-muted-foreground">
+              {dict.gitProviders.form.appIdHelp}
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="privateKey">
+              {dict.gitProviders.form.privateKey}
+              <span className="ml-1 text-destructive">*</span>
+            </Label>
+            <Textarea
+              id="privateKey"
+              name="privateKey"
+              placeholder={
+                isEdit
+                  ? dict.gitProviders.form.privateKeyPlaceholderEdit
+                  : dict.gitProviders.form.privateKeyPlaceholder
+              }
+              required={!isEdit}
+              aria-invalid={!!errors.privateKey}
+              rows={6}
+              className="font-mono text-xs"
+            />
+            {errors.privateKey && (
+              <p className="text-sm text-destructive">{errors.privateKey}</p>
+            )}
+            <p className="text-sm text-muted-foreground">
+              {dict.gitProviders.form.privateKeyHelp}
+            </p>
+          </div>
+        </>
+      )}
 
       <div className="space-y-2">
         <Label htmlFor="webhookSecret">
           {dict.gitProviders.form.webhookSecret}
+          <span className="ml-2 text-sm text-muted-foreground">
+            ({dict.gitProviders.form.optional})
+          </span>
         </Label>
-        <Input
-          id="webhookSecret"
-          name="webhookSecret"
-          type="password"
-          defaultValue={provider?.webhookSecret ?? ""}
-          placeholder={dict.gitProviders.form.webhookSecretPlaceholder}
-          aria-invalid={!!errors.webhookSecret}
-        />
+        <div className="relative">
+          <Input
+            id="webhookSecret"
+            name="webhookSecret"
+            type={showWebhookSecret ? "text" : "password"}
+            defaultValue={provider?.webhookSecret ?? ""}
+            placeholder={dict.gitProviders.form.webhookSecretPlaceholder}
+            aria-invalid={!!errors.webhookSecret}
+            className="pr-10"
+          />
+          <button
+            type="button"
+            onClick={() => setShowWebhookSecret(!showWebhookSecret)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            aria-label={
+              showWebhookSecret
+                ? dict.gitProviders.form.hideToken
+                : dict.gitProviders.form.showToken
+            }
+          >
+            {showWebhookSecret ? (
+              <EyeOff className="h-4 w-4" />
+            ) : (
+              <Eye className="h-4 w-4" />
+            )}
+          </button>
+        </div>
         {errors.webhookSecret && (
           <p className="text-sm text-destructive">{errors.webhookSecret}</p>
         )}

@@ -6,7 +6,7 @@ tools:
   - Glob
   - Grep
   - Bash
-model: opus
+model: sonnet
 skills:
   - vercel-react-best-practices
   - next-best-practices
@@ -20,7 +20,7 @@ Always run these commands during review:
 
 1. **Run `bun fix`** — Check for linting and formatting issues. If there are issues, fix them.
 2. **Run `bun test:run`** — Run unit tests. If there are failures, fix them.
-3. **Run `bun playwright test --project=firefox`** — Run e2e tests. If there are failures, fix them.
+3. **Run `bun test:e2e`** — Run e2e tests. If there are failures, fix them.
 4. **Run `bun run build`** — Verify the build passes. If there are errors, fix them.
 
 ## Review Checklist
@@ -79,7 +79,7 @@ Always run these commands during review:
 - [ ] Tests use specific selectors (heading levels, `.first()` for duplicates)
 - [ ] Tests use `/en-US/` locale prefix in URLs
 - [ ] Tests cover navigation, form submission, and validation
-- [ ] All tests pass (`bun playwright test --project=firefox`)
+- [ ] All tests pass (`bun test:e2e`)
 
 ### Security
 
