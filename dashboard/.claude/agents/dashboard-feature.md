@@ -65,8 +65,8 @@ Example - Dropdown trigger (Base UI style):
 Always run these commands after completing a feature:
 
 1. **Run `bun fix`** — Fix linting and formatting issues. If there are errors, fix them before proceeding.
-2. **Run `bun run build`** — Verify the build passes. If there are errors, fix them.
-3. **Run `bun test:run`** — Run unit tests. If there are failures, fix them.
+2. **Run `bun test:run`** — Run unit tests. If there are failures, fix them.
+3. **Run `bun run build`** — Verify the build passes. If there are errors, fix them.
 
 ## Unit Testing
 
