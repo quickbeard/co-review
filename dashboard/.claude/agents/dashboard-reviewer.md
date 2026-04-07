@@ -19,7 +19,8 @@ You are reviewing dashboard code for quality, performance, and best practices.
 Always run these commands during review:
 
 1. **Run `bun fix`** — Check for linting and formatting issues. If there are issues, fix them.
-2. **Run `bun run build`** — Verify the build passes. If there are errors, fix them.
+2. **Run `bun test:run`** — Run unit tests. If there are failures, fix them.
+3. **Run `bun run build`** — Verify the build passes. If there are errors, fix them.
 
 ## Review Checklist
 
@@ -63,6 +64,13 @@ Always run these commands during review:
 - [ ] No dead code or unused imports
 - [ ] Error handling present
 - [ ] Loading states handled
+
+### Unit Testing
+
+- [ ] Server actions have unit tests in `tests/lib/actions/`
+- [ ] Tests cover success and error cases
+- [ ] Tests mock Prisma and Next.js functions properly
+- [ ] All tests pass (`bun test:run`)
 
 ### Security
 
