@@ -24,6 +24,13 @@ from pr_agent.identity_providers.identity_provider import Eligibility
 from pr_agent.log import LoggingFormat, get_logger, setup_logger
 from pr_agent.servers.utils import DefaultDictWithTimeout, verify_signature
 
+# Load credentials from PostgreSQL database if DATABASE_URL is set
+try:
+    from pr_agent.secret_providers.postgres_provider import apply_postgres_credentials_to_config
+    apply_postgres_credentials_to_config()
+except Exception:
+    pass  # Fall back to .secrets.toml
+
 setup_logger(fmt=LoggingFormat.JSON, level=get_settings().get("CONFIG.LOG_LEVEL", "DEBUG"))
 base_path = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
 build_number_path = os.path.join(base_path, "build_number.txt")

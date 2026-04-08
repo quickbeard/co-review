@@ -23,13 +23,7 @@ import type {
 } from "@/lib/api/types";
 
 interface GitProviderFormProps {
-  provider?: GitProvider & {
-    // These fields are not returned by GET, only used for edit form
-    accessToken?: string;
-    appId?: string;
-    privateKey?: string;
-    webhookSecret?: string;
-  };
+  provider?: GitProvider;
   lang: string;
 }
 
@@ -81,22 +75,31 @@ export function GitProviderForm({ provider, lang }: GitProviderFormProps) {
 
     const formData = new FormData(e.currentTarget);
 
-    const input = {
-      id: provider?.id,
-      type: formData.get("type") as GitProviderType,
-      name: formData.get("name") as string,
-      baseUrl: (formData.get("baseUrl") as string) || undefined,
-      accessToken: (formData.get("accessToken") as string) || undefined,
-      deploymentType: isGitHub ? deploymentType : undefined,
-      appId: (formData.get("appId") as string) || undefined,
-      privateKey: (formData.get("privateKey") as string) || undefined,
-      webhookSecret: (formData.get("webhookSecret") as string) || undefined,
-    };
-
     try {
-      const result = isEdit
-        ? await updateGitProvider({ ...input, id: provider.id })
-        : await createGitProvider(input);
+      let result;
+      if (isEdit && provider) {
+        result = await updateGitProvider({
+          id: provider.id,
+          name: formData.get("name") as string,
+          baseUrl: (formData.get("baseUrl") as string) || undefined,
+          accessToken: (formData.get("accessToken") as string) || undefined,
+          deploymentType: isGitHub ? deploymentType : undefined,
+          appId: (formData.get("appId") as string) || undefined,
+          privateKey: (formData.get("privateKey") as string) || undefined,
+          webhookSecret: (formData.get("webhookSecret") as string) || undefined,
+        });
+      } else {
+        result = await createGitProvider({
+          type: formData.get("type") as GitProviderType,
+          name: formData.get("name") as string,
+          baseUrl: (formData.get("baseUrl") as string) || undefined,
+          accessToken: (formData.get("accessToken") as string) || undefined,
+          deploymentType: isGitHub ? deploymentType : undefined,
+          appId: (formData.get("appId") as string) || undefined,
+          privateKey: (formData.get("privateKey") as string) || undefined,
+          webhookSecret: (formData.get("webhookSecret") as string) || undefined,
+        });
+      }
 
       if (!result.success) {
         setError(result.error || "An error occurred");

@@ -10,6 +10,13 @@ from pr_agent.log import get_logger, setup_logger
 log_level = os.environ.get("LOG_LEVEL", "INFO")
 setup_logger(log_level)
 
+# Load credentials from PostgreSQL database if DATABASE_URL is set
+try:
+    from pr_agent.secret_providers.postgres_provider import apply_postgres_credentials_to_config
+    apply_postgres_credentials_to_config()
+except Exception:
+    pass  # Fall back to .secrets.toml
+
 
 def set_parser():
     parser = argparse.ArgumentParser(description='AI based pull request analyzer', usage=

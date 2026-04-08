@@ -36,7 +36,7 @@ export function GitProviderList({ providers, lang }: GitProviderListProps) {
   const dict = useDictionary();
   const router = useRouter();
 
-  async function handleDelete(id: string, name: string) {
+  async function handleDelete(id: number, name: string) {
     if (!confirm(dict.gitProviders.deleteConfirm.replace("{name}", name))) {
       return;
     }
@@ -49,7 +49,7 @@ export function GitProviderList({ providers, lang }: GitProviderListProps) {
     }
   }
 
-  async function handleToggleStatus(id: string, currentStatus: boolean) {
+  async function handleToggleStatus(id: number, currentStatus: boolean) {
     const result = await toggleGitProviderStatus(id, !currentStatus);
     if (result.success) {
       router.refresh();
