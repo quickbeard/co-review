@@ -8,15 +8,15 @@ services:
     container_name: co-review-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: pr_agent
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -35,7 +35,7 @@ services:
     ports:
       - "3001:3001"
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/pr_agent
+      DATABASE_URL: ${DATABASE_URL}
       API_HOST: "0.0.0.0"
       API_PORT: "3001"
     volumes:
@@ -64,7 +64,7 @@ services:
       - "3002:3000"
     environment:
       PORT: "3000"
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/pr_agent
+      DATABASE_URL: ${DATABASE_URL}
     volumes:
       - ./pr-agent/pr_agent/settings/.secrets.toml:/app/pr_agent/settings/.secrets.toml:ro
     depends_on:
@@ -85,7 +85,7 @@ services:
       - "3003:3000"
     environment:
       PORT: "3000"
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/pr_agent
+      DATABASE_URL: ${DATABASE_URL}
     volumes:
       - ./pr-agent/pr_agent/settings/.secrets.toml:/app/pr_agent/settings/.secrets.toml:ro
     depends_on:
