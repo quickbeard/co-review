@@ -6,7 +6,7 @@ import { getDictionary } from "@/app/dictionaries";
 import { hasLocale } from "@/lib/i18n/config";
 import { notFound } from "next/navigation";
 import { GitProviderForm } from "@/components/git-providers";
-import { getGitProvider } from "@/lib/actions/git-providers";
+import { getGitProvider } from "@/lib/api/git-providers";
 
 export default async function EditGitProviderPage({
   params,
@@ -20,32 +20,23 @@ export default async function EditGitProviderPage({
   }
 
   const dict = await getDictionary(lang);
-  const provider = await getGitProvider(id);
+  const result = await getGitProvider(id);
 
-  if (!provider) {
+  if (!result.success || !result.data) {
     notFound();
   }
 
-  // Extract only the fields needed by the form
-  const formProvider = {
-    id: provider.id,
-    type: provider.type,
-    name: provider.name,
-    baseUrl: provider.baseUrl,
-    webhookSecret: provider.webhookSecret,
-    deploymentType: provider.deploymentType,
-    appId: provider.appId,
-  };
+  const provider = result.data;
 
   return (
     <div className="space-y-6">
       <div>
         <Link
-          href={`/${lang}/git-providers/${id}`}
+          href={`/${lang}/git-providers`}
           className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="size-4" />
-          {dict.gitProviders.backToDetail}
+          {dict.gitProviders.backToList}
         </Link>
         <h1 className="mt-4 text-2xl font-bold text-foreground">
           {dict.gitProviders.editProvider.title}
@@ -56,7 +47,7 @@ export default async function EditGitProviderPage({
       </div>
 
       <div className="max-w-xl rounded-lg border border-border bg-background p-6">
-        <GitProviderForm provider={formProvider} lang={lang} />
+        <GitProviderForm provider={provider} lang={lang} />
       </div>
     </div>
   );

@@ -1,3 +1,3 @@
 export { GitProviderForm } from "./git-provider-form";
-export { GitProviderActions } from "./git-provider-actions";
-export { ProviderTypeBadge, providerLabels } from "./provider-type-badge";
+export { ProviderTypeBadge } from "./provider-type-badge";
+export { GitProviderList } from "./git-provider-list";

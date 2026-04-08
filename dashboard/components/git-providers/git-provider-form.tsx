@@ -15,24 +15,20 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useDictionary } from "@/lib/i18n/dictionary-context";
-import {
-  createGitProvider,
-  updateGitProvider,
-} from "@/lib/actions/git-providers";
+import { createGitProvider, updateGitProvider } from "@/lib/api/git-providers";
 import type {
+  GitProvider,
   GitProviderType,
   GitHubDeploymentType,
-} from "@/generated/prisma/client";
+} from "@/lib/api/types";
 
 interface GitProviderFormProps {
-  provider?: {
-    id: string;
-    type: GitProviderType;
-    name: string;
-    baseUrl: string | null;
-    webhookSecret: string | null;
-    deploymentType: GitHubDeploymentType | null;
-    appId: string | null;
+  provider?: GitProvider & {
+    // These fields are not returned by GET, only used for edit form
+    accessToken?: string;
+    appId?: string;
+    privateKey?: string;
+    webhookSecret?: string;
   };
   lang: string;
 }
@@ -68,7 +64,10 @@ export function GitProviderForm({ provider, lang }: GitProviderFormProps) {
   const [deploymentType, setDeploymentType] = useState<GitHubDeploymentType>(
     provider?.deploymentType ?? "user",
   );
+
+  // Password visibility toggles
   const [showAccessToken, setShowAccessToken] = useState(false);
+  const [showPrivateKey, setShowPrivateKey] = useState(false);
   const [showWebhookSecret, setShowWebhookSecret] = useState(false);
 
   const showBaseUrl = selfHostedProviders.includes(selectedType);
@@ -82,13 +81,25 @@ export function GitProviderForm({ provider, lang }: GitProviderFormProps) {
 
     const formData = new FormData(e.currentTarget);
 
+    const input = {
+      id: provider?.id,
+      type: formData.get("type") as GitProviderType,
+      name: formData.get("name") as string,
+      baseUrl: (formData.get("baseUrl") as string) || undefined,
+      accessToken: (formData.get("accessToken") as string) || undefined,
+      deploymentType: isGitHub ? deploymentType : undefined,
+      appId: (formData.get("appId") as string) || undefined,
+      privateKey: (formData.get("privateKey") as string) || undefined,
+      webhookSecret: (formData.get("webhookSecret") as string) || undefined,
+    };
+
     try {
       const result = isEdit
-        ? await updateGitProvider(formData)
-        : await createGitProvider(formData);
+        ? await updateGitProvider({ ...input, id: provider.id })
+        : await createGitProvider(input);
 
       if (!result.success) {
-        setError(result.error);
+        setError(result.error || "An error occurred");
         if (result.fieldErrors) {
           setErrors(result.fieldErrors);
         }
@@ -106,14 +117,13 @@ export function GitProviderForm({ provider, lang }: GitProviderFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      {isEdit && <input type="hidden" name="id" value={provider.id} />}
-
       {error && (
         <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
           {error}
         </div>
       )}
 
+      {/* Provider Type */}
       <div className="space-y-2">
         <Label htmlFor="type">
           {dict.gitProviders.form.type}
@@ -140,6 +150,7 @@ export function GitProviderForm({ provider, lang }: GitProviderFormProps) {
         )}
       </div>
 
+      {/* Display Name */}
       <div className="space-y-2">
         <Label htmlFor="name">
           {dict.gitProviders.form.name}
@@ -150,8 +161,8 @@ export function GitProviderForm({ provider, lang }: GitProviderFormProps) {
           name="name"
           defaultValue={provider?.name}
           placeholder={dict.gitProviders.form.namePlaceholder}
-          aria-invalid={!!errors.name}
           required
+          aria-invalid={!!errors.name}
         />
         {errors.name && (
           <p className="text-sm text-destructive">{errors.name}</p>
@@ -161,6 +172,7 @@ export function GitProviderForm({ provider, lang }: GitProviderFormProps) {
         </p>
       </div>
 
+      {/* Base URL (for self-hosted) */}
       {showBaseUrl && (
         <div className="space-y-2">
           <Label htmlFor="baseUrl">
@@ -186,55 +198,50 @@ export function GitProviderForm({ provider, lang }: GitProviderFormProps) {
         </div>
       )}
 
-      {/* GitHub Deployment Type Radio Buttons */}
+      {/* GitHub Deployment Type */}
       {isGitHub && (
         <div className="space-y-3">
           <Label>
             {dict.gitProviders.form.deploymentType}
             <span className="ml-1 text-destructive">*</span>
           </Label>
-          <div className="flex gap-6">
-            <label className="flex cursor-pointer items-center gap-2">
+          <div className="flex gap-4">
+            <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="radio"
-                name="deploymentType"
+                name="deploymentTypeRadio"
                 value="user"
                 checked={deploymentType === "user"}
-                onChange={(e) =>
-                  setDeploymentType(e.target.value as GitHubDeploymentType)
-                }
-                className="h-4 w-4 border-input text-primary focus:ring-ring"
+                onChange={() => setDeploymentType("user")}
+                className="h-4 w-4 text-primary"
               />
               <span className="text-sm">
                 {dict.gitProviders.form.deploymentTypeUser}
               </span>
             </label>
-            <label className="flex cursor-pointer items-center gap-2">
+            <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="radio"
-                name="deploymentType"
+                name="deploymentTypeRadio"
                 value="app"
                 checked={deploymentType === "app"}
-                onChange={(e) =>
-                  setDeploymentType(e.target.value as GitHubDeploymentType)
-                }
-                className="h-4 w-4 border-input text-primary focus:ring-ring"
+                onChange={() => setDeploymentType("app")}
+                className="h-4 w-4 text-primary"
               />
               <span className="text-sm">
                 {dict.gitProviders.form.deploymentTypeApp}
               </span>
             </label>
           </div>
-          {errors.deploymentType && (
-            <p className="text-sm text-destructive">{errors.deploymentType}</p>
-          )}
           <p className="text-sm text-muted-foreground">
-            {dict.gitProviders.form.deploymentTypeHelp}
+            {deploymentType === "user"
+              ? dict.gitProviders.form.deploymentTypeUserHelp
+              : dict.gitProviders.form.deploymentTypeAppHelp}
           </p>
         </div>
       )}
 
-      {/* Personal Access Token - for non-GitHub or GitHub user deployment */}
+      {/* Access Token (for non-GitHub or GitHub user deployment) */}
       {(!isGitHub || deploymentType === "user") && (
         <div className="space-y-2">
           <Label htmlFor="accessToken">
@@ -251,9 +258,7 @@ export function GitProviderForm({ provider, lang }: GitProviderFormProps) {
               placeholder={
                 isEdit
                   ? dict.gitProviders.form.accessTokenPlaceholderEdit
-                  : isGitHub
-                    ? dict.gitProviders.form.userTokenPlaceholder
-                    : dict.gitProviders.form.accessTokenPlaceholder
+                  : dict.gitProviders.form.accessTokenPlaceholder
               }
               required={!isEdit}
               aria-invalid={!!errors.accessToken}
@@ -287,9 +292,10 @@ export function GitProviderForm({ provider, lang }: GitProviderFormProps) {
         </div>
       )}
 
-      {/* GitHub App Fields */}
+      {/* GitHub App fields */}
       {isGitHub && deploymentType === "app" && (
         <>
+          {/* App ID */}
           <div className="space-y-2">
             <Label htmlFor="appId">
               {dict.gitProviders.form.appId}
@@ -298,9 +304,8 @@ export function GitProviderForm({ provider, lang }: GitProviderFormProps) {
             <Input
               id="appId"
               name="appId"
-              defaultValue={provider?.appId ?? ""}
               placeholder={dict.gitProviders.form.appIdPlaceholder}
-              required={!isEdit}
+              required
               aria-invalid={!!errors.appId}
             />
             {errors.appId && (
@@ -311,24 +316,39 @@ export function GitProviderForm({ provider, lang }: GitProviderFormProps) {
             </p>
           </div>
 
+          {/* Private Key */}
           <div className="space-y-2">
             <Label htmlFor="privateKey">
               {dict.gitProviders.form.privateKey}
               <span className="ml-1 text-destructive">*</span>
             </Label>
-            <Textarea
-              id="privateKey"
-              name="privateKey"
-              placeholder={
-                isEdit
-                  ? dict.gitProviders.form.privateKeyPlaceholderEdit
-                  : dict.gitProviders.form.privateKeyPlaceholder
-              }
-              required={!isEdit}
-              aria-invalid={!!errors.privateKey}
-              rows={6}
-              className="font-mono text-xs"
-            />
+            <div className="relative">
+              <Textarea
+                id="privateKey"
+                name="privateKey"
+                placeholder={dict.gitProviders.form.privateKeyPlaceholder}
+                required
+                rows={6}
+                className="font-mono text-xs pr-10"
+                aria-invalid={!!errors.privateKey}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPrivateKey(!showPrivateKey)}
+                className="absolute right-3 top-3 text-muted-foreground hover:text-foreground"
+                aria-label={
+                  showPrivateKey
+                    ? dict.gitProviders.form.hideToken
+                    : dict.gitProviders.form.showToken
+                }
+              >
+                {showPrivateKey ? (
+                  <EyeOff className="h-4 w-4" />
+                ) : (
+                  <Eye className="h-4 w-4" />
+                )}
+              </button>
+            </div>
             {errors.privateKey && (
               <p className="text-sm text-destructive">{errors.privateKey}</p>
             )}
@@ -339,6 +359,7 @@ export function GitProviderForm({ provider, lang }: GitProviderFormProps) {
         </>
       )}
 
+      {/* Webhook Secret */}
       <div className="space-y-2">
         <Label htmlFor="webhookSecret">
           {dict.gitProviders.form.webhookSecret}
@@ -351,7 +372,6 @@ export function GitProviderForm({ provider, lang }: GitProviderFormProps) {
             id="webhookSecret"
             name="webhookSecret"
             type={showWebhookSecret ? "text" : "password"}
-            defaultValue={provider?.webhookSecret ?? ""}
             placeholder={dict.gitProviders.form.webhookSecretPlaceholder}
             aria-invalid={!!errors.webhookSecret}
             className="pr-10"
@@ -381,6 +401,7 @@ export function GitProviderForm({ provider, lang }: GitProviderFormProps) {
         </p>
       </div>
 
+      {/* Form Actions */}
       <div className="flex gap-3">
         <Button type="submit" disabled={pending}>
           {pending

@@ -43,9 +43,15 @@
     "addProvider": "Thêm nhà cung cấp",
     "backToList": "Quay lại danh sách",
     "backToDetail": "Quay lại chi tiết",
+    "apiError": "Không thể kết nối với PR-Agent API",
+    "deleteConfirm": "Bạn có chắc chắn muốn xóa \"{name}\"? Hành động này không thể hoàn tác.",
     "status": {
       "active": "Hoạt động",
       "inactive": "Không hoạt động"
+    },
+    "empty": {
+      "title": "Chưa có nhà cung cấp Git",
+      "description": "Bắt đầu bằng cách thêm nhà cung cấp git đầu tiên."
     },
     "emptyState": {
       "title": "Chưa có nhà cung cấp Git",
@@ -56,6 +62,9 @@
       "type": "Loại",
       "repositories": "Kho lưu trữ",
       "status": "Trạng thái",
+      "active": "Hoạt động",
+      "inactive": "Không hoạt động",
+      "createdAt": "Ngày tạo",
       "actions": "Hành động"
     },
     "newProvider": {
@@ -86,6 +95,8 @@
       "deploymentTypeUser": "Token truy cập cá nhân",
       "deploymentTypeApp": "Ứng dụng GitHub",
       "deploymentTypeHelp": "Chọn cách xác thực với GitHub.",
+      "deploymentTypeUserHelp": "Sử dụng token truy cập cá nhân cho cài đặt đơn giản. Yêu cầu token với quyền 'repo'.",
+      "deploymentTypeAppHelp": "Sử dụng Ứng dụng GitHub để truy cập toàn tổ chức với quyền chi tiết.",
       "userToken": "Token truy cập cá nhân",
       "userTokenPlaceholder": "ghp_xxxxxxxxxxxx",
       "userTokenHelp": "Token truy cập cá nhân GitHub với quyền 'repo'.",

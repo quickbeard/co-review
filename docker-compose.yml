@@ -71,15 +71,8 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
-    env_file:
-      - ./dashboard/.env
     environment:
       NODE_ENV: production
-      # Override database URL to use docker network
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/dashboard
-    depends_on:
-      postgres:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000"]
       interval: 10s

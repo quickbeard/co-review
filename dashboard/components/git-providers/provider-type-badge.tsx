@@ -1,11 +1,14 @@
 import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
-import type { GitProviderType } from "@/generated/prisma/client";
+import type { GitProviderType } from "@/lib/api/types";
 
-interface ProviderTypeBadgeProps {
-  type: GitProviderType;
-  className?: string;
-}
+const providerColors: Record<GitProviderType, string> = {
+  github: "bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900",
+  gitlab: "bg-orange-600 text-white",
+  bitbucket: "bg-blue-600 text-white",
+  azure_devops: "bg-blue-500 text-white",
+  gitea: "bg-green-600 text-white",
+  gerrit: "bg-teal-600 text-white",
+};
 
 const providerLabels: Record<GitProviderType, string> = {
   github: "GitHub",
@@ -16,28 +19,14 @@ const providerLabels: Record<GitProviderType, string> = {
   gerrit: "Gerrit",
 };
 
-const providerColors: Record<GitProviderType, string> = {
-  github: "bg-gray-900 text-white dark:bg-gray-100 dark:text-gray-900",
-  gitlab: "bg-orange-500 text-white",
-  bitbucket: "bg-blue-600 text-white",
-  azure_devops: "bg-blue-500 text-white",
-  gitea: "bg-green-600 text-white",
-  gerrit: "bg-purple-600 text-white",
-};
+interface ProviderTypeBadgeProps {
+  type: GitProviderType;
+}
 
-export function ProviderTypeBadge({ type, className }: ProviderTypeBadgeProps) {
+export function ProviderTypeBadge({ type }: ProviderTypeBadgeProps) {
   return (
-    <Badge
-      variant="secondary"
-      className={cn(
-        "border-transparent font-medium",
-        providerColors[type],
-        className,
-      )}
-    >
+    <Badge variant="outline" className={providerColors[type]}>
       {providerLabels[type]}
     </Badge>
   );
 }
-
-export { providerLabels };
