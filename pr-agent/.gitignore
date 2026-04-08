@@ -14,4 +14,3 @@ build/
 docs/.cache/
 .qodo
 poetry.lock
-.secrets.toml
