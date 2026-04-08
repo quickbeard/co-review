@@ -8,15 +8,15 @@ services:
     container_name: co-review-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: dashboard
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -25,12 +25,37 @@ services:
   # PR-Agent Services
   # =============================================================================
 
+  # PR-Agent API for Dashboard integration
+  pr-agent-api:
+    build:
+      context: ./pr-agent
+      dockerfile: docker/Dockerfile
+    container_name: co-review-pr-agent-api
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      API_HOST: "0.0.0.0"
+      API_PORT: "3001"
+    volumes:
+      - ./pr-agent/pr_agent/settings/.secrets.toml:/app/pr_agent/settings/.secrets.toml:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    command: ["python", "-m", "pr_agent.servers.api"]
+
   # GitHub webhook handler (optional - enable if using GitHub App)
   pr-agent-github:
     build:
       context: ./pr-agent
       dockerfile: docker/Dockerfile
-      target: github_app
     container_name: co-review-pr-agent-github
     restart: unless-stopped
     profiles:
@@ -39,15 +64,19 @@ services:
       - "3002:3000"
     environment:
       PORT: "3000"
+      DATABASE_URL: ${DATABASE_URL}
     volumes:
       - ./pr-agent/pr_agent/settings/.secrets.toml:/app/pr_agent/settings/.secrets.toml:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["python", "-m", "pr_agent.servers.github_app"]
 
   # GitLab webhook handler (optional - enable if using GitLab)
   pr-agent-gitlab:
     build:
       context: ./pr-agent
       dockerfile: docker/Dockerfile
-      target: gitlab_webhook
     container_name: co-review-pr-agent-gitlab
     restart: unless-stopped
     profiles:
@@ -56,8 +85,13 @@ services:
       - "3003:3000"
     environment:
       PORT: "3000"
+      DATABASE_URL: ${DATABASE_URL}
     volumes:
       - ./pr-agent/pr_agent/settings/.secrets.toml:/app/pr_agent/settings/.secrets.toml:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["python", "-m", "pr_agent.servers.gitlab_webhook"]
 
   # =============================================================================
   # Dashboard
@@ -73,6 +107,10 @@ services:
       - "3000:3000"
     environment:
       NODE_ENV: production
+      NEXT_PUBLIC_PR_AGENT_API_URL: http://pr-agent-api:3001
+    depends_on:
+      pr-agent-api:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3000"]
       interval: 10s
