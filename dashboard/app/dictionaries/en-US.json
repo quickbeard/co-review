@@ -43,9 +43,15 @@
     "addProvider": "Add Provider",
     "backToList": "Back to Git Providers",
     "backToDetail": "Back to Provider",
+    "apiError": "Failed to connect to PR-Agent API",
+    "deleteConfirm": "Are you sure you want to delete \"{name}\"? This action cannot be undone.",
     "status": {
       "active": "Active",
       "inactive": "Inactive"
+    },
+    "empty": {
+      "title": "No Git Providers",
+      "description": "Get started by adding your first git provider."
     },
     "emptyState": {
       "title": "No Git Providers",
@@ -56,6 +62,9 @@
       "type": "Type",
       "repositories": "Repositories",
       "status": "Status",
+      "active": "Active",
+      "inactive": "Inactive",
+      "createdAt": "Created",
       "actions": "Actions"
     },
     "newProvider": {
@@ -86,6 +95,8 @@
       "deploymentTypeUser": "Personal Access Token",
       "deploymentTypeApp": "GitHub App",
       "deploymentTypeHelp": "Choose how to authenticate with GitHub.",
+      "deploymentTypeUserHelp": "Use a personal access token for simple setups. Requires a token with 'repo' scope.",
+      "deploymentTypeAppHelp": "Use a GitHub App for organization-wide access with fine-grained permissions.",
       "userToken": "Personal Access Token",
       "userTokenPlaceholder": "ghp_xxxxxxxxxxxx",
       "userTokenHelp": "A GitHub personal access token with 'repo' scope.",
