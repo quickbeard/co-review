@@ -4,11 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
-  GitBranch,
-  FolderGit2,
-  Server,
-  FileText,
-  ClipboardList,
   Settings,
   ChevronLeft,
   ChevronRight,
@@ -26,11 +21,6 @@ interface NavItem {
 
 const navigation: NavItem[] = [
   { nameKey: "overview", href: "/", icon: LayoutDashboard },
-  { nameKey: "gitProviders", href: "/git-providers", icon: GitBranch },
-  { nameKey: "repositories", href: "/repositories", icon: FolderGit2 },
-  { nameKey: "llmServers", href: "/llm-servers", icon: Server },
-  { nameKey: "reviewContexts", href: "/review-contexts", icon: FileText },
-  { nameKey: "reviews", href: "/reviews", icon: ClipboardList },
   { nameKey: "settings", href: "/settings", icon: Settings },
 ];
 
