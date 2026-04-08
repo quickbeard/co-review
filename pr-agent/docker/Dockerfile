@@ -47,9 +47,3 @@ ADD tests tests
 FROM base AS cli
 ADD pr_agent pr_agent
 ENTRYPOINT ["python", "pr_agent/cli.py"]
-
-FROM base AS dashboard_api
-RUN pip install --no-cache-dir gunicorn
-ADD pr_agent pr_agent
-EXPOSE 3001
-CMD ["python", "-m", "gunicorn", "-k", "uvicorn.workers.UvicornWorker", "-b", "0.0.0.0:3001", "--workers", "2", "--timeout", "120", "pr_agent.servers.dashboard_api:app"]

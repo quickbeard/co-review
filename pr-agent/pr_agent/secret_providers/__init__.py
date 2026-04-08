@@ -20,12 +20,5 @@ def get_secret_provider():
             return AWSSecretsManagerProvider()
         except Exception as e:
             raise ValueError(f"Failed to initialize aws_secrets_manager secret provider {provider_id}") from e
-    elif provider_id == 'postgres':
-        try:
-            from pr_agent.secret_providers.postgres_secret_provider import \
-                get_postgres_secret_provider
-            return get_postgres_secret_provider()
-        except Exception as e:
-            raise ValueError(f"Failed to initialize postgres secret provider") from e
     else:
         raise ValueError("Unknown SECRET_PROVIDER")
