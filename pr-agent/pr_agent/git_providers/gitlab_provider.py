@@ -30,33 +30,14 @@ class DiffNotFoundError(Exception):
 class GitLabProvider(GitProvider):
 
     def __init__(self, merge_request_url: Optional[str] = None, incremental: Optional[bool] = False):
-        # Try to get credentials from postgres secret provider first
-        gitlab_url = None
-        gitlab_access_token = None
-        secret_provider = get_settings().get("CONFIG.SECRET_PROVIDER", "")
-
-        if secret_provider == "postgres":
-            credentials = self._get_credentials_from_postgres()
-            if credentials:
-                gitlab_access_token = credentials.get('token')
-                gitlab_url = credentials.get('base_url')
-                if gitlab_url and gitlab_access_token:
-                    get_logger().info("Using GitLab credentials from PostgreSQL secret provider")
-
-        # Fall back to config settings if postgres didn't provide credentials
-        if not gitlab_url:
-            gitlab_url = get_settings().get("GITLAB.URL", None)
-        if not gitlab_access_token:
-            gitlab_access_token = get_settings().get("GITLAB.PERSONAL_ACCESS_TOKEN", None)
-
+        gitlab_url = get_settings().get("GITLAB.URL", None)
         if not gitlab_url:
             raise ValueError("GitLab URL is not set in the config file")
         self.gitlab_url = gitlab_url
-
+        ssl_verify = get_settings().get("GITLAB.SSL_VERIFY", True)
+        gitlab_access_token = get_settings().get("GITLAB.PERSONAL_ACCESS_TOKEN", None)
         if not gitlab_access_token:
             raise ValueError("GitLab personal access token is not set in the config file")
-
-        ssl_verify = get_settings().get("GITLAB.SSL_VERIFY", True)
         # Authentication method selection via configuration
         auth_method = get_settings().get("GITLAB.AUTH_TYPE", "oauth_token")
 
@@ -356,23 +337,6 @@ class GitLabProvider(GitProvider):
     def pr(self):
         '''The GitLab terminology is merge request (MR) instead of pull request (PR)'''
         return self.mr
-
-    @staticmethod
-    def _get_credentials_from_postgres():
-        """
-        Fetch GitLab credentials from PostgreSQL secret provider.
-
-        Returns:
-            dict with 'token', 'base_url', 'webhook_secret' or None if unavailable.
-        """
-        try:
-            from pr_agent.secret_providers import get_secret_provider
-            provider = get_secret_provider()
-            if provider and hasattr(provider, 'get_git_credentials'):
-                return provider.get_git_credentials('gitlab')
-        except Exception as e:
-            get_logger().warning(f"Failed to get GitLab credentials from postgres: {e}")
-        return None
 
     def _set_merge_request(self, merge_request_url: str):
         self.id_project, self.id_mr = self._parse_merge_request_url(merge_request_url)
