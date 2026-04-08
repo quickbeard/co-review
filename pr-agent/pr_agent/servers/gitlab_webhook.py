@@ -21,6 +21,13 @@ from pr_agent.log import LoggingFormat, get_logger, setup_logger
 from pr_agent.secret_providers import get_secret_provider
 from pr_agent.git_providers import get_git_provider_with_context
 
+# Load credentials from PostgreSQL database if DATABASE_URL is set
+try:
+    from pr_agent.secret_providers.postgres_provider import apply_postgres_credentials_to_config
+    apply_postgres_credentials_to_config()
+except Exception:
+    pass  # Fall back to .secrets.toml
+
 setup_logger(fmt=LoggingFormat.JSON, level=get_settings().get("CONFIG.LOG_LEVEL", "DEBUG"))
 router = APIRouter()
 
