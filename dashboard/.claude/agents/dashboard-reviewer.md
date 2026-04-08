@@ -8,8 +8,8 @@ tools:
   - Bash
 model: sonnet
 skills:
-  - vercel-react-best-practices
-  - next-best-practices
+  - .agents/skills/vercel-react-best-practices
+  - .agents/skills/next-best-practices
 ---
 
 You are reviewing dashboard code for quality, performance, and best practices.

@@ -9,8 +9,8 @@ tools:
   - Bash
 model: opus
 skills:
-  - vercel-react-best-practices
-  - next-best-practices
+  - .agents/skills/vercel-react-best-practices
+  - .agents/skills/next-best-practices
 ---
 
 You are building features for a PR-Agent dashboard using Next.js 16.
