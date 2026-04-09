@@ -12,6 +12,7 @@ from typing import Annotated
 import uvicorn
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from pr_agent.db import (
@@ -24,6 +25,7 @@ from pr_agent.db import (
     LLMProviderPublic,
     LLMProviderUpdate,
     LLMProviderType,
+    PRAgentConfig,
     create_db_and_tables,
     get_session,
 )
@@ -405,6 +407,126 @@ def delete_llm_provider(
 
     get_logger().info(f"Deleted LLM provider: {provider_name} (id={provider_id})")
     return {"status": "deleted", "id": str(provider_id)}
+
+
+# =============================================================================
+# Token Limits API
+# =============================================================================
+
+# Default values from configuration.toml
+DEFAULT_TOKEN_LIMITS = {
+    "max_description_tokens": 500,
+    "max_commits_tokens": 500,
+    "max_model_tokens": 32000,
+    "custom_model_max_tokens": 32000,
+}
+
+
+class TokenLimits(BaseModel):
+    """Token limits configuration model."""
+    max_description_tokens: int = 500
+    max_commits_tokens: int = 500
+    max_model_tokens: int = 32000
+    custom_model_max_tokens: int = 32000
+
+
+class TokenLimitsUpdate(BaseModel):
+    """Model for updating token limits."""
+    max_description_tokens: int | None = None
+    max_commits_tokens: int | None = None
+    max_model_tokens: int | None = None
+    custom_model_max_tokens: int | None = None
+
+
+def get_or_create_default_config(session: Session) -> PRAgentConfig:
+    """Get the default PR Agent config, creating one if it doesn't exist."""
+    statement = select(PRAgentConfig).where(PRAgentConfig.is_default == True)
+    config = session.exec(statement).first()
+
+    if not config:
+        # Create a default config with token limits from configuration.toml
+        config = PRAgentConfig(
+            name="Default Configuration",
+            is_active=True,
+            is_default=True,
+            max_description_tokens=DEFAULT_TOKEN_LIMITS["max_description_tokens"],
+            max_commits_tokens=DEFAULT_TOKEN_LIMITS["max_commits_tokens"],
+            max_model_tokens=DEFAULT_TOKEN_LIMITS["max_model_tokens"],
+            custom_model_max_tokens=DEFAULT_TOKEN_LIMITS["custom_model_max_tokens"],
+        )
+        session.add(config)
+        session.commit()
+        session.refresh(config)
+        get_logger().info("Created default PR Agent configuration")
+
+    return config
+
+
+@app.get("/api/token-limits", response_model=TokenLimits)
+def get_token_limits(session: SessionDep) -> TokenLimits:
+    """Get current token limits from the default configuration."""
+    config = get_or_create_default_config(session)
+    return TokenLimits(
+        max_description_tokens=config.max_description_tokens,
+        max_commits_tokens=config.max_commits_tokens,
+        max_model_tokens=config.max_model_tokens,
+        custom_model_max_tokens=config.custom_model_max_tokens,
+    )
+
+
+@app.put("/api/token-limits", response_model=TokenLimits)
+def update_token_limits(
+    limits: TokenLimitsUpdate,
+    session: SessionDep,
+) -> TokenLimits:
+    """Update token limits in the default configuration."""
+    config = get_or_create_default_config(session)
+
+    # Update only provided fields
+    update_data = limits.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        if value is not None:
+            setattr(config, key, value)
+
+    config.updated_at = datetime.now(timezone.utc)
+    session.add(config)
+    session.commit()
+    session.refresh(config)
+
+    get_logger().info(f"Updated token limits: {update_data}")
+
+    return TokenLimits(
+        max_description_tokens=config.max_description_tokens,
+        max_commits_tokens=config.max_commits_tokens,
+        max_model_tokens=config.max_model_tokens,
+        custom_model_max_tokens=config.custom_model_max_tokens,
+    )
+
+
+@app.get("/api/token-limits/defaults", response_model=TokenLimits)
+def get_default_token_limits() -> TokenLimits:
+    """Get the default token limits from configuration.toml."""
+    return TokenLimits(**DEFAULT_TOKEN_LIMITS)
+
+
+@app.post("/api/token-limits/reset", response_model=TokenLimits)
+def reset_token_limits(session: SessionDep) -> TokenLimits:
+    """Reset token limits to default values from configuration.toml."""
+    config = get_or_create_default_config(session)
+
+    config.max_description_tokens = DEFAULT_TOKEN_LIMITS["max_description_tokens"]
+    config.max_commits_tokens = DEFAULT_TOKEN_LIMITS["max_commits_tokens"]
+    config.max_model_tokens = DEFAULT_TOKEN_LIMITS["max_model_tokens"]
+    config.custom_model_max_tokens = DEFAULT_TOKEN_LIMITS["custom_model_max_tokens"]
+    config.updated_at = datetime.now(timezone.utc)
+
+    session.add(config)
+    session.commit()
+    session.refresh(config)
+
+    get_logger().info("Reset token limits to defaults")
+
+    return TokenLimits(**DEFAULT_TOKEN_LIMITS)
 
 
 # =============================================================================

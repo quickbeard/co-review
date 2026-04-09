@@ -258,5 +258,26 @@
       "disable": "Disable",
       "setDefault": "Set as Default"
     }
+  },
+  "tokenLimits": {
+    "title": "Token Limits",
+    "description": "Configure token limits for PR descriptions, commits, and model context windows.",
+    "form": {
+      "maxDescriptionTokens": "Max Description Tokens",
+      "maxDescriptionTokensHelp": "Maximum number of tokens for PR description analysis.",
+      "maxCommitsTokens": "Max Commits Tokens",
+      "maxCommitsTokensHelp": "Maximum number of tokens for commit message analysis.",
+      "maxModelTokens": "Max Model Tokens",
+      "maxModelTokensHelp": "Maximum context window size for the LLM model.",
+      "customModelMaxTokens": "Custom Model Max Tokens",
+      "customModelMaxTokensHelp": "Maximum tokens for custom/self-hosted models.",
+      "save": "Save Changes",
+      "saving": "Saving...",
+      "resetToDefaults": "Reset to Defaults",
+      "resetting": "Resetting...",
+      "saveSuccess": "Token limits updated successfully.",
+      "resetSuccess": "Token limits reset to defaults.",
+      "errorGeneric": "Something went wrong. Please try again."
+    }
   }
 }
