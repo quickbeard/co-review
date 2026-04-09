@@ -538,7 +538,7 @@ export function LLMProviderForm({ provider, lang, tokenLimits }: LLMProviderForm
           </Label>
           {modelsFetched && availableModels.length > 0 ? (
             <Select
-              name="model"
+              name="modelId"
               value={selectedModel}
               onValueChange={(value) => setSelectedModel(value ?? "")}
               required
@@ -557,7 +557,7 @@ export function LLMProviderForm({ provider, lang, tokenLimits }: LLMProviderForm
           ) : (
             <Input
               id="model"
-              name="model"
+              name="modelId"
               value={selectedModel}
               onChange={(e) => setSelectedModel(e.target.value)}
               placeholder={dict.llmProviders.form.modelPlaceholder}
