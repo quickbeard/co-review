@@ -138,7 +138,11 @@ export function GitProviderForm({ provider, lang }: GitProviderFormProps) {
           onValueChange={(value) => setSelectedType(value as GitProviderType)}
         >
           <SelectTrigger id="type">
-            <SelectValue placeholder={dict.gitProviders.form.selectType} />
+            <SelectValue placeholder={dict.gitProviders.form.selectType}>
+              {(value) =>
+                providerTypes.find((t) => t.value === value)?.label ?? value
+              }
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {providerTypes.map((type) => (

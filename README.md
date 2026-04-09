@@ -35,6 +35,7 @@ AI-powered code review tool with a dashboard for managing git provider credentia
 ```
 
 **How it works:**
+
 1. Users configure git provider credentials via the Dashboard UI
 2. Dashboard calls PR-Agent API to store/retrieve credentials
 3. PR-Agent stores credentials in PostgreSQL (using SQLModel)
@@ -112,6 +113,9 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
 # Install dependencies
 pip install -r requirements.txt
+
+# Install dev dependencies
+pip install -r requirements-dev.txt
 
 # Start API server
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/pr_agent \
@@ -229,104 +233,104 @@ PR-Agent uses `.secrets.toml` for credentials and `configuration.toml` for setti
 
 ### LLM Providers
 
-| Provider              | Variable                | Required | Description                                       |
-| --------------------- | ----------------------- | -------- | ------------------------------------------------- |
-| **OpenAI**            | `key`                   | Yes      | API key from platform.openai.com                  |
-|                       | `org`                   | No       | Organization ID for team accounts                 |
-|                       | `api_type`              | No       | Set to `"azure"` for Azure OpenAI                 |
-|                       | `api_version`           | No       | Azure API version (e.g., `2023-05-15`)            |
-|                       | `api_base`              | No       | Custom endpoint URL (Azure or proxy)              |
-|                       | `deployment_id`         | No       | Azure deployment name                             |
-|                       | `fallback_deployments`  | No       | Backup deployment IDs if primary fails            |
-| **Anthropic**         | `key`                   | Yes      | Claude API key from anthropic.com                 |
-| **Cohere**            | `key`                   | Yes      | API key from dashboard.cohere.ai                  |
-| **Replicate**         | `key`                   | Yes      | API key from replicate.com                        |
-| **Groq**              | `key`                   | Yes      | API key from console.groq.com                     |
-| **xAI**               | `key`                   | Yes      | Grok API key from console.x.ai                    |
-| **HuggingFace**       | `key`                   | Yes      | Inference API token                               |
-|                       | `api_base`              | Yes      | Your inference endpoint URL                       |
-| **Ollama**            | `api_base`              | Yes      | Endpoint URL (`http://localhost:11434` for local) |
-|                       | `api_key`               | No       | Required only for Ollama Cloud                    |
-| **VertexAI**          | `vertex_project`        | Yes      | Google Cloud project name                         |
-|                       | `vertex_location`       | Yes      | GCP region (e.g., `us-central1`)                  |
-| **Google AI Studio**  | `gemini_api_key`        | Yes      | Gemini API key                                    |
-| **DeepSeek**          | `key`                   | Yes      | DeepSeek API key                                  |
-| **DeepInfra**         | `key`                   | Yes      | DeepInfra API key                                 |
-| **Azure AD**          | `client_id`             | Yes      | Azure AD app client ID                            |
-|                       | `client_secret`         | Yes      | Azure AD app secret                               |
-|                       | `tenant_id`             | Yes      | Azure AD tenant ID                                |
-|                       | `api_base`              | Yes      | Azure OpenAI service URL                          |
-| **OpenRouter**        | `key`                   | Yes      | OpenRouter API key                                |
-|                       | `api_base`              | No       | Custom endpoint                                   |
-| **AWS Bedrock**       | `AWS_ACCESS_KEY_ID`     | Yes      | AWS access key                                    |
-|                       | `AWS_SECRET_ACCESS_KEY` | Yes      | AWS secret key                                    |
-|                       | `AWS_REGION_NAME`       | Yes      | AWS region (e.g., `us-east-1`)                    |
-| **AWS Secrets Mgr**   | `secret_arn`            | Yes      | ARN of secret containing PR-Agent config          |
-|                       | `region_name`           | No       | Override region                                   |
-| **LiteLLM**           | `extra_body`            | No       | JSON for custom params (e.g., flex processing)    |
-|                       | `model_id`              | No       | Custom inference profile ID                       |
+| Provider             | Variable                | Required | Description                                       |
+| -------------------- | ----------------------- | -------- | ------------------------------------------------- |
+| **OpenAI**           | `key`                   | Yes      | API key from platform.openai.com                  |
+|                      | `org`                   | No       | Organization ID for team accounts                 |
+|                      | `api_type`              | No       | Set to `"azure"` for Azure OpenAI                 |
+|                      | `api_version`           | No       | Azure API version (e.g., `2023-05-15`)            |
+|                      | `api_base`              | No       | Custom endpoint URL (Azure or proxy)              |
+|                      | `deployment_id`         | No       | Azure deployment name                             |
+|                      | `fallback_deployments`  | No       | Backup deployment IDs if primary fails            |
+| **Anthropic**        | `key`                   | Yes      | Claude API key from anthropic.com                 |
+| **Cohere**           | `key`                   | Yes      | API key from dashboard.cohere.ai                  |
+| **Replicate**        | `key`                   | Yes      | API key from replicate.com                        |
+| **Groq**             | `key`                   | Yes      | API key from console.groq.com                     |
+| **xAI**              | `key`                   | Yes      | Grok API key from console.x.ai                    |
+| **HuggingFace**      | `key`                   | Yes      | Inference API token                               |
+|                      | `api_base`              | Yes      | Your inference endpoint URL                       |
+| **Ollama**           | `api_base`              | Yes      | Endpoint URL (`http://localhost:11434` for local) |
+|                      | `api_key`               | No       | Required only for Ollama Cloud                    |
+| **VertexAI**         | `vertex_project`        | Yes      | Google Cloud project name                         |
+|                      | `vertex_location`       | Yes      | GCP region (e.g., `us-central1`)                  |
+| **Google AI Studio** | `gemini_api_key`        | Yes      | Gemini API key                                    |
+| **DeepSeek**         | `key`                   | Yes      | DeepSeek API key                                  |
+| **DeepInfra**        | `key`                   | Yes      | DeepInfra API key                                 |
+| **Azure AD**         | `client_id`             | Yes      | Azure AD app client ID                            |
+|                      | `client_secret`         | Yes      | Azure AD app secret                               |
+|                      | `tenant_id`             | Yes      | Azure AD tenant ID                                |
+|                      | `api_base`              | Yes      | Azure OpenAI service URL                          |
+| **OpenRouter**       | `key`                   | Yes      | OpenRouter API key                                |
+|                      | `api_base`              | No       | Custom endpoint                                   |
+| **AWS Bedrock**      | `AWS_ACCESS_KEY_ID`     | Yes      | AWS access key                                    |
+|                      | `AWS_SECRET_ACCESS_KEY` | Yes      | AWS secret key                                    |
+|                      | `AWS_REGION_NAME`       | Yes      | AWS region (e.g., `us-east-1`)                    |
+| **AWS Secrets Mgr**  | `secret_arn`            | Yes      | ARN of secret containing PR-Agent config          |
+|                      | `region_name`           | No       | Override region                                   |
+| **LiteLLM**          | `extra_body`            | No       | JSON for custom params (e.g., flex processing)    |
+|                      | `model_id`              | No       | Custom inference profile ID                       |
 
 ### Git Providers
 
-| Provider                 | Variable                | Required    | Description                             |
-| ------------------------ | ----------------------- | ----------- | --------------------------------------- |
-| **GitHub**               | `deployment_type`       | Yes         | `"user"` (PAT) or `"app"` (GitHub App)  |
-|                          | `user_token`            | User mode   | Personal access token with `repo` scope |
-|                          | `app_id`                | App mode    | GitHub App ID                           |
-|                          | `private_key`           | App mode    | GitHub App private key (PEM format)     |
-|                          | `webhook_secret`        | No          | Secret for verifying webhook payloads   |
-| **GitLab**               | `personal_access_token` | Yes         | PAT with `api` scope                    |
-|                          | `shared_secret`         | No          | Webhook verification secret             |
-| **Gitea**                | `personal_access_token` | Yes         | Gitea access token                      |
-|                          | `webhook_secret`        | No          | Webhook verification secret             |
-| **Bitbucket**            | `auth_type`             | Yes         | `"bearer"` or `"basic"`                 |
-|                          | `bearer_token`          | Bearer mode | OAuth2 bearer token                     |
-|                          | `basic_token`           | Basic mode  | Basic auth token                        |
-| **Bitbucket Server**     | `bearer_token`          | Yes         | Server bearer token                     |
-|                          | `webhook_secret`        | No          | Webhook verification                    |
-|                          | `app_key`               | No          | For Bitbucket app integration           |
-|                          | `url`                   | No          | Server URL                              |
-| **Azure DevOps**         | `org`                   | Yes         | Organization name                       |
-|                          | `pat`                   | Yes         | Personal access token                   |
-| **Azure DevOps Server**  | `webhook_username`      | No          | Basic auth username for webhooks        |
-|                          | `webhook_password`      | No          | Basic auth password for webhooks        |
+| Provider                | Variable                | Required    | Description                             |
+| ----------------------- | ----------------------- | ----------- | --------------------------------------- |
+| **GitHub**              | `deployment_type`       | Yes         | `"user"` (PAT) or `"app"` (GitHub App)  |
+|                         | `user_token`            | User mode   | Personal access token with `repo` scope |
+|                         | `app_id`                | App mode    | GitHub App ID                           |
+|                         | `private_key`           | App mode    | GitHub App private key (PEM format)     |
+|                         | `webhook_secret`        | No          | Secret for verifying webhook payloads   |
+| **GitLab**              | `personal_access_token` | Yes         | PAT with `api` scope                    |
+|                         | `shared_secret`         | No          | Webhook verification secret             |
+| **Gitea**               | `personal_access_token` | Yes         | Gitea access token                      |
+|                         | `webhook_secret`        | No          | Webhook verification secret             |
+| **Bitbucket**           | `auth_type`             | Yes         | `"bearer"` or `"basic"`                 |
+|                         | `bearer_token`          | Bearer mode | OAuth2 bearer token                     |
+|                         | `basic_token`           | Basic mode  | Basic auth token                        |
+| **Bitbucket Server**    | `bearer_token`          | Yes         | Server bearer token                     |
+|                         | `webhook_secret`        | No          | Webhook verification                    |
+|                         | `app_key`               | No          | For Bitbucket app integration           |
+|                         | `url`                   | No          | Server URL                              |
+| **Azure DevOps**        | `org`                   | Yes         | Organization name                       |
+|                         | `pat`                   | Yes         | Personal access token                   |
+| **Azure DevOps Server** | `webhook_username`      | No          | Basic auth username for webhooks        |
+|                         | `webhook_password`      | No          | Basic auth password for webhooks        |
 
 ### Vector Databases (for Similar Issues feature)
 
-| Provider     | Variable      | Required | Description                         |
-| ------------ | ------------- | -------- | ----------------------------------- |
-| **Pinecone** | `api_key`     | Yes      | Pinecone API key                    |
-|              | `environment` | Yes      | Environment (e.g., `gcp-starter`)   |
-| **Qdrant**   | `url`         | Yes      | Qdrant Cloud or self-hosted URL     |
-|              | `api_key`     | Yes      | Qdrant API key                      |
-| **LanceDB**  | `uri`         | Yes      | Local path (e.g., `./lancedb`)      |
+| Provider     | Variable      | Required | Description                       |
+| ------------ | ------------- | -------- | --------------------------------- |
+| **Pinecone** | `api_key`     | Yes      | Pinecone API key                  |
+|              | `environment` | Yes      | Environment (e.g., `gcp-starter`) |
+| **Qdrant**   | `url`         | Yes      | Qdrant Cloud or self-hosted URL   |
+|              | `api_key`     | Yes      | Qdrant API key                    |
+| **LanceDB**  | `uri`         | Yes      | Local path (e.g., `./lancedb`)    |
 
 ### PR-Agent Configuration Settings
 
 **General Config:**
 
-| Variable            | Default   | Description                                     |
-| ------------------- | --------- | ----------------------------------------------- |
-| `model`             | `gpt-4`   | Primary LLM model                               |
-| `fallback_models`   | `[]`      | Backup models if primary fails                  |
-| `git_provider`      | `github`  | Default git provider                            |
-| `ai_timeout`        | `120`     | Request timeout in seconds                      |
-| `temperature`       | `0.2`     | Model creativity (0-2)                          |
-| `max_model_tokens`  | `32000`   | Max tokens per request                          |
-| `response_language` | `en-US`   | Output language (ISO format)                    |
-| `verbosity_level`   | `0`       | Log verbosity (0-2)                             |
-| `reasoning_effort`  | `medium`  | For reasoning models (`low`/`medium`/`high`)    |
+| Variable            | Default  | Description                                  |
+| ------------------- | -------- | -------------------------------------------- |
+| `model`             | `gpt-4`  | Primary LLM model                            |
+| `fallback_models`   | `[]`     | Backup models if primary fails               |
+| `git_provider`      | `github` | Default git provider                         |
+| `ai_timeout`        | `120`    | Request timeout in seconds                   |
+| `temperature`       | `0.2`    | Model creativity (0-2)                       |
+| `max_model_tokens`  | `32000`  | Max tokens per request                       |
+| `response_language` | `en-US`  | Output language (ISO format)                 |
+| `verbosity_level`   | `0`      | Log verbosity (0-2)                          |
+| `reasoning_effort`  | `medium` | For reasoning models (`low`/`medium`/`high`) |
 
 **Ignore Patterns:**
 
-| Variable                   | Description                          |
-| -------------------------- | ------------------------------------ |
-| `ignore_pr_title`          | Regex patterns to skip PRs by title  |
-| `ignore_pr_target_branches`| Skip PRs targeting these branches    |
-| `ignore_pr_source_branches`| Skip PRs from these branches         |
-| `ignore_pr_labels`         | Skip PRs with these labels           |
-| `ignore_pr_authors`        | Skip PRs from these authors          |
-| `ignore_repositories`      | Skip these repos entirely            |
+| Variable                    | Description                         |
+| --------------------------- | ----------------------------------- |
+| `ignore_pr_title`           | Regex patterns to skip PRs by title |
+| `ignore_pr_target_branches` | Skip PRs targeting these branches   |
+| `ignore_pr_source_branches` | Skip PRs from these branches        |
+| `ignore_pr_labels`          | Skip PRs with these labels          |
+| `ignore_pr_authors`         | Skip PRs from these authors         |
+| `ignore_repositories`       | Skip these repos entirely           |
 
 ## Project Structure
 
@@ -355,12 +359,12 @@ The PR-Agent API uses SQLModel with PostgreSQL. Four tables store all configurat
 
 ### Tables Overview
 
-| Table                 | Purpose                                                      |
-| --------------------- | ------------------------------------------------------------ |
-| `git_providers`       | Git provider credentials (GitHub, GitLab, Bitbucket, etc.)   |
-| `llm_providers`       | LLM API credentials (OpenAI, Anthropic, VertexAI, etc.)      |
-| `vector_db_providers` | Vector DB credentials for similar issues (Pinecone, Qdrant)  |
-| `pr_agent_configs`    | PR-Agent configuration profiles                              |
+| Table                 | Purpose                                                     |
+| --------------------- | ----------------------------------------------------------- |
+| `git_providers`       | Git provider credentials (GitHub, GitLab, Bitbucket, etc.)  |
+| `llm_providers`       | LLM API credentials (OpenAI, Anthropic, VertexAI, etc.)     |
+| `vector_db_providers` | Vector DB credentials for similar issues (Pinecone, Qdrant) |
+| `pr_agent_configs`    | PR-Agent configuration profiles                             |
 
 ### git_providers
 
@@ -485,5 +489,32 @@ class PRAgentConfig(SQLModel, table=True):
 ## Credential Priority
 
 PR-Agent loads credentials in this order:
+
 1. **PostgreSQL database** (if `DATABASE_URL` is set) - managed via Dashboard
 2. **`.secrets.toml`** - fallback for local development
+
+### How it works
+
+When you configure Git Providers or LLM Providers via the Dashboard:
+
+1. Dashboard calls PR-Agent API to store credentials in PostgreSQL
+2. PR-Agent CLI/webhooks read credentials from the database on startup
+3. Credentials are applied to PR-Agent settings before any operations
+
+```
+Dashboard UI → PR-Agent API → PostgreSQL
+                                   ↓
+PR-Agent CLI ← apply_postgres_credentials_to_config()
+```
+
+### Example: Configure OpenAI via Dashboard, use CLI
+
+1. Start services: `docker compose up -d`
+2. Open Dashboard at http://localhost:3000
+3. Go to "LLM Providers" → Add new OpenAI provider with your API key
+4. Run CLI with database URL:
+   ```bash
+   DATABASE_URL=postgresql://postgres:postgres@localhost:5432/pr_agent \
+     python -m pr_agent.cli --pr_url https://github.com/owner/repo/pull/123 review
+   ```
+5. PR-Agent automatically loads OpenAI credentials from the database

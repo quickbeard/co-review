@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
   GitBranch,
+  Brain,
   Settings,
   ChevronLeft,
   ChevronRight,
@@ -23,6 +24,7 @@ interface NavItem {
 const navigation: NavItem[] = [
   { nameKey: "overview", href: "/", icon: LayoutDashboard },
   { nameKey: "gitProviders", href: "/git-providers", icon: GitBranch },
+  { nameKey: "llmProviders", href: "/llm-providers", icon: Brain },
   { nameKey: "settings", href: "/settings", icon: Settings },
 ];
 
