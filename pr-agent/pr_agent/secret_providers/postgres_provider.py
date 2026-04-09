@@ -455,6 +455,22 @@ def apply_postgres_credentials_to_config():
         if llm_creds:
             provider_type = llm_creds.get("provider_type", "")
 
+            # Set the model from database (model_id field)
+            # For litellm, the model needs provider prefix (e.g., "openai/model-name")
+            if llm_creds.get("model_id"):
+                model_id = llm_creds["model_id"]
+                # Known provider prefixes that litellm recognizes
+                known_prefixes = (
+                    "openai/", "anthropic/", "azure/", "huggingface/", "ollama/",
+                    "vertexai/", "vertex_ai/", "gemini/", "bedrock/", "cohere/",
+                    "replicate/", "groq/", "xai/", "deepseek/", "deepinfra/",
+                    "mistral/", "codestral/", "watsonx/"
+                )
+                # Add provider prefix if model doesn't already have a known prefix
+                if provider_type and not model_id.startswith(known_prefixes):
+                    model_id = f"{provider_type}/{model_id}"
+                get_settings().set("CONFIG.MODEL", model_id)
+
             # Apply credentials based on provider type
             if provider_type == "openai":
                 if llm_creds.get("api_key"):

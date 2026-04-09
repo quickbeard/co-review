@@ -152,11 +152,11 @@ source .venv/bin/activate
 
 # Run a review (credentials loaded from database)
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/pr_agent \
-  pr-agent --pr_url https://github.com/owner/repo/pull/123 review
+  python -m pr_agent.cli --pr_url https://github.com/owner/repo/pull/123 review
 
 # Other commands: describe, improve, ask
 DATABASE_URL=postgresql://postgres:postgres@localhost:5432/pr_agent \
-  pr-agent --pr_url https://github.com/owner/repo/pull/123 describe
+  python -m pr_agent.cli --pr_url https://github.com/owner/repo/pull/123 describe
 ```
 
 ## Services
