@@ -396,7 +396,7 @@ class PRAgentConfig(SQLModel, table=True):
     max_description_tokens: int = Field(default=500)
     max_commits_tokens: int = Field(default=500)
     max_model_tokens: int = Field(default=32000)
-    custom_model_max_tokens: int = Field(default=40000)
+    custom_model_max_tokens: int = Field(default=32000)
 
     # Model parameters
     seed: int = Field(default=-1)
@@ -474,7 +474,7 @@ class PRAgentConfigCreate(SQLModel):
     max_description_tokens: int = Field(default=500)
     max_commits_tokens: int = Field(default=500)
     max_model_tokens: int = Field(default=32000)
-    custom_model_max_tokens: int = Field(default=40000)
+    custom_model_max_tokens: int = Field(default=32000)
 
     # Model parameters
     seed: int = Field(default=-1)

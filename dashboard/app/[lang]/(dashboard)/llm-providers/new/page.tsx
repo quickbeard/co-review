@@ -6,6 +6,7 @@ import { getDictionary } from "@/app/dictionaries";
 import { hasLocale } from "@/lib/i18n/config";
 import { notFound } from "next/navigation";
 import { LLMProviderForm } from "@/components/llm-providers";
+import { getTokenLimits } from "@/lib/api/token-limits";
 
 export default async function NewLLMProviderPage({
   params,
@@ -19,6 +20,8 @@ export default async function NewLLMProviderPage({
   }
 
   const dict = await getDictionary(lang);
+  const tokenLimitsResult = await getTokenLimits();
+  const tokenLimits = tokenLimitsResult.success ? tokenLimitsResult.data : null;
 
   return (
     <div className="space-y-6">
@@ -38,8 +41,18 @@ export default async function NewLLMProviderPage({
         </p>
       </div>
 
-      <div className="max-w-xl rounded-lg border border-border bg-background p-6">
-        <LLMProviderForm lang={lang} />
+      <div className="max-w-2xl rounded-lg border border-border bg-background p-6">
+        <LLMProviderForm
+          lang={lang}
+          tokenLimits={
+            tokenLimits ?? {
+              max_description_tokens: 500,
+              max_commits_tokens: 500,
+              max_model_tokens: 32000,
+              custom_model_max_tokens: 32000,
+            }
+          }
+        />
       </div>
     </div>
   );

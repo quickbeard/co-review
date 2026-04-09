@@ -22,6 +22,7 @@ import {
   DEFAULT_OPENAI_API_BASE,
   DEFAULT_MODELS_BY_API_BASE,
 } from "@/lib/api/llm-providers";
+import { updateTokenLimits, type TokenLimits } from "@/lib/api/token-limits";
 import { normalizeApiBaseUrl } from "@/lib/validators";
 import type {
   LLMProvider,
@@ -32,6 +33,7 @@ import { providerFieldConfigs } from "@/lib/api/llm-provider-types";
 interface LLMProviderFormProps {
   provider?: LLMProvider;
   lang: string;
+  tokenLimits?: TokenLimits;
 }
 
 const providerTypes: { value: LLMProviderType; label: string }[] = [
@@ -43,7 +45,54 @@ const providerTypes: { value: LLMProviderType; label: string }[] = [
   { value: "litellm", label: "LiteLLM" },
 ];
 
-export function LLMProviderForm({ provider, lang }: LLMProviderFormProps) {
+// Models with predefined max tokens in pr_agent/algo/__init__.py
+// For these models, custom_model_max_tokens is not needed
+const KNOWN_MODELS = new Set([
+  // OpenAI
+  "gpt-3.5-turbo", "gpt-3.5-turbo-0125", "gpt-3.5-turbo-0613", "gpt-3.5-turbo-1106",
+  "gpt-3.5-turbo-16k", "gpt-3.5-turbo-16k-0613",
+  "gpt-4", "gpt-4-0613", "gpt-4-32k", "gpt-4-1106-preview", "gpt-4-0125-preview",
+  "gpt-4o", "gpt-4o-2024-05-13", "gpt-4o-2024-08-06", "gpt-4o-2024-11-20",
+  "gpt-4o-mini", "gpt-4o-mini-2024-07-18",
+  "gpt-4-turbo", "gpt-4-turbo-preview", "gpt-4-turbo-2024-04-09",
+  "gpt-4.5-preview", "gpt-4.5-preview-2025-02-27",
+  "gpt-4.1", "gpt-4.1-2025-04-14", "gpt-4.1-mini", "gpt-4.1-mini-2025-04-14",
+  "gpt-4.1-nano", "gpt-4.1-nano-2025-04-14",
+  "o1", "o1-mini", "o1-preview", "o1-2024-12-17", "o1-mini-2024-09-12", "o1-preview-2024-09-12",
+  "o3", "o3-mini", "o3-2025-04-16", "o3-mini-2025-01-31",
+  "o4-mini", "o4-mini-2025-04-16",
+  // Anthropic/Claude
+  "claude-instant-1", "claude-2", "claude-3-5-sonnet",
+  "anthropic/claude-3-opus-20240229", "anthropic/claude-3-5-sonnet-20240620",
+  "anthropic/claude-3-5-sonnet-20241022", "anthropic/claude-3-7-sonnet-20250219",
+  "anthropic/claude-3-5-haiku-20241022", "anthropic/claude-haiku-4-5-20251001",
+  "anthropic/claude-opus-4-20250514", "anthropic/claude-opus-4-5-20251101",
+  "anthropic/claude-sonnet-4-20250514", "anthropic/claude-sonnet-4-5-20250929",
+  "anthropic/claude-opus-4-6", "anthropic/claude-sonnet-4-6",
+  // Vertex AI
+  "vertex_ai/gemini-1.5-pro", "vertex_ai/gemini-1.5-flash", "vertex_ai/gemini-2.0-flash",
+  "vertex_ai/gemini-2.5-pro", "vertex_ai/gemini-2.5-flash",
+  "vertex_ai/claude-3-5-sonnet@20240620", "vertex_ai/claude-3-5-sonnet-v2@20241022",
+  // Gemini
+  "gemini/gemini-1.5-pro", "gemini/gemini-1.5-flash", "gemini/gemini-2.0-flash",
+  "gemini/gemini-2.5-pro", "gemini/gemini-2.5-flash",
+  // Bedrock
+  "bedrock/anthropic.claude-3-sonnet-20240229-v1:0",
+  "bedrock/anthropic.claude-3-5-sonnet-20240620-v1:0",
+  "bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0",
+  // DeepSeek
+  "deepseek/deepseek-chat", "deepseek/deepseek-reasoner",
+  // Groq
+  "groq/llama-3.3-70b-versatile", "groq/llama-3.1-8b-instant",
+  // xAI
+  "xai/grok-2", "xai/grok-2-latest", "xai/grok-3", "xai/grok-3-mini",
+  // Ollama (basic)
+  "ollama/llama3",
+  // Mistral
+  "mistral/mistral-large-latest", "mistral/mistral-small-latest",
+]);
+
+export function LLMProviderForm({ provider, lang, tokenLimits }: LLMProviderFormProps) {
   const dict = useDictionary();
   const router = useRouter();
   const isEdit = !!provider;
@@ -55,6 +104,20 @@ export function LLMProviderForm({ provider, lang }: LLMProviderFormProps) {
     provider?.type ?? "openai",
   );
 
+  // Token limits state
+  const [maxDescriptionTokens, setMaxDescriptionTokens] = useState(
+    tokenLimits?.max_description_tokens ?? 500,
+  );
+  const [maxCommitsTokens, setMaxCommitsTokens] = useState(
+    tokenLimits?.max_commits_tokens ?? 500,
+  );
+  const [maxModelTokens, setMaxModelTokens] = useState(
+    tokenLimits?.max_model_tokens ?? 32000,
+  );
+  const [customModelMaxTokens, setCustomModelMaxTokens] = useState(
+    tokenLimits?.custom_model_max_tokens ?? 32000,
+  );
+
   // Password visibility toggles
   const [showApiKey, setShowApiKey] = useState(false);
   const [showClientSecret, setShowClientSecret] = useState(false);
@@ -62,9 +125,7 @@ export function LLMProviderForm({ provider, lang }: LLMProviderFormProps) {
 
   // Model fetching state
   const [apiKeyValue, setApiKeyValue] = useState("");
-  const [apiBaseValue, setApiBaseValue] = useState(
-    provider?.apiBase ?? "https://netmind.viettel.vn/gateway/v1",
-  );
+  const [apiBaseValue, setApiBaseValue] = useState(provider?.apiBase ?? "");
   const [lastFetchedApiBase, setLastFetchedApiBase] = useState<string | null>(
     null,
   );
@@ -81,6 +142,11 @@ export function LLMProviderForm({ provider, lang }: LLMProviderFormProps) {
   const debounceTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const fieldConfig = providerFieldConfigs[selectedType];
+
+  // Check if selected model is a known model (has predefined max tokens)
+  // If not known, show custom_model_max_tokens field
+  const isKnownModel = selectedModel ? KNOWN_MODELS.has(selectedModel) : false;
+
   const canFetchModels = MODEL_FETCHABLE_PROVIDERS.includes(
     selectedType as (typeof MODEL_FETCHABLE_PROVIDERS)[number],
   );
@@ -272,6 +338,14 @@ export function LLMProviderForm({ provider, lang }: LLMProviderFormProps) {
         setPending(false);
         return;
       }
+
+      // Save token limits
+      await updateTokenLimits({
+        max_description_tokens: maxDescriptionTokens,
+        max_commits_tokens: maxCommitsTokens,
+        max_model_tokens: maxModelTokens,
+        custom_model_max_tokens: customModelMaxTokens,
+      });
 
       router.push(`/${lang}/llm-providers`);
       router.refresh();
@@ -883,6 +957,92 @@ export function LLMProviderForm({ provider, lang }: LLMProviderFormProps) {
           </p>
         </div>
       )}
+
+      {/* Token Limits Section */}
+      <div className="space-y-4 border-t border-border pt-6">
+        <div>
+          <h3 className="text-lg font-medium">{dict.tokenLimits.title}</h3>
+          <p className="text-sm text-muted-foreground">
+            {dict.tokenLimits.description}
+          </p>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="maxDescriptionTokens">
+              {dict.tokenLimits.form.maxDescriptionTokens}
+            </Label>
+            <Input
+              id="maxDescriptionTokens"
+              type="number"
+              min={0}
+              value={maxDescriptionTokens}
+              onChange={(e) => setMaxDescriptionTokens(parseInt(e.target.value, 10) || 0)}
+              disabled={pending}
+            />
+            <p className="text-sm text-muted-foreground">
+              {dict.tokenLimits.form.maxDescriptionTokensHelp}
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="maxCommitsTokens">
+              {dict.tokenLimits.form.maxCommitsTokens}
+            </Label>
+            <Input
+              id="maxCommitsTokens"
+              type="number"
+              min={0}
+              value={maxCommitsTokens}
+              onChange={(e) => setMaxCommitsTokens(parseInt(e.target.value, 10) || 0)}
+              disabled={pending}
+            />
+            <p className="text-sm text-muted-foreground">
+              {dict.tokenLimits.form.maxCommitsTokensHelp}
+            </p>
+          </div>
+
+          {/* Show max_model_tokens for known models or when no model selected */}
+          {(isKnownModel || !selectedModel) && (
+            <div className="space-y-2">
+              <Label htmlFor="maxModelTokens">
+                {dict.tokenLimits.form.maxModelTokens}
+              </Label>
+              <Input
+                id="maxModelTokens"
+                type="number"
+                min={0}
+                value={maxModelTokens}
+                onChange={(e) => setMaxModelTokens(parseInt(e.target.value, 10) || 0)}
+                disabled={pending}
+              />
+              <p className="text-sm text-muted-foreground">
+                {dict.tokenLimits.form.maxModelTokensHelp}
+              </p>
+            </div>
+          )}
+
+          {/* Show custom_model_max_tokens only for custom/unknown models */}
+          {!isKnownModel && selectedModel && (
+            <div className="space-y-2">
+              <Label htmlFor="customModelMaxTokens">
+                {dict.tokenLimits.form.customModelMaxTokens}
+              </Label>
+              <Input
+                id="customModelMaxTokens"
+                type="number"
+                min={0}
+                value={customModelMaxTokens}
+                onChange={(e) => setCustomModelMaxTokens(parseInt(e.target.value, 10) || 0)}
+                disabled={pending}
+              />
+              <p className="text-sm text-muted-foreground">
+                {dict.tokenLimits.form.customModelMaxTokensHelp}
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Form Actions */}
       <div className="flex gap-3">

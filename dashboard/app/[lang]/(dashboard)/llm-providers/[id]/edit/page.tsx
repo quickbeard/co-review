@@ -7,6 +7,7 @@ import { hasLocale } from "@/lib/i18n/config";
 import { notFound } from "next/navigation";
 import { LLMProviderForm } from "@/components/llm-providers";
 import { getLLMProvider } from "@/lib/api/llm-providers";
+import { getTokenLimits } from "@/lib/api/token-limits";
 
 export default async function EditLLMProviderPage({
   params,
@@ -20,13 +21,17 @@ export default async function EditLLMProviderPage({
   }
 
   const dict = await getDictionary(lang);
-  const result = await getLLMProvider(id);
+  const [providerResult, tokenLimitsResult] = await Promise.all([
+    getLLMProvider(id),
+    getTokenLimits(),
+  ]);
 
-  if (!result.success || !result.data) {
+  if (!providerResult.success || !providerResult.data) {
     notFound();
   }
 
-  const provider = result.data;
+  const provider = providerResult.data;
+  const tokenLimits = tokenLimitsResult.success ? tokenLimitsResult.data : null;
 
   return (
     <div className="space-y-6">
@@ -46,8 +51,19 @@ export default async function EditLLMProviderPage({
         </p>
       </div>
 
-      <div className="max-w-xl rounded-lg border border-border bg-background p-6">
-        <LLMProviderForm provider={provider} lang={lang} />
+      <div className="max-w-2xl rounded-lg border border-border bg-background p-6">
+        <LLMProviderForm
+          provider={provider}
+          lang={lang}
+          tokenLimits={
+            tokenLimits ?? {
+              max_description_tokens: 500,
+              max_commits_tokens: 500,
+              max_model_tokens: 32000,
+              custom_model_max_tokens: 32000,
+            }
+          }
+        />
       </div>
     </div>
   );

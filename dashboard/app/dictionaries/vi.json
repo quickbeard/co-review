@@ -258,5 +258,26 @@
       "disable": "Tắt",
       "setDefault": "Đặt làm mặc định"
     }
+  },
+  "tokenLimits": {
+    "title": "Giới hạn Token",
+    "description": "Cấu hình giới hạn token cho mô tả PR, commit và cửa sổ ngữ cảnh mô hình.",
+    "form": {
+      "maxDescriptionTokens": "Token mô tả tối đa",
+      "maxDescriptionTokensHelp": "Số lượng token tối đa cho phân tích mô tả PR.",
+      "maxCommitsTokens": "Token commit tối đa",
+      "maxCommitsTokensHelp": "Số lượng token tối đa cho phân tích thông điệp commit.",
+      "maxModelTokens": "Token mô hình tối đa",
+      "maxModelTokensHelp": "Kích thước cửa sổ ngữ cảnh tối đa cho mô hình LLM.",
+      "customModelMaxTokens": "Token mô hình tùy chỉnh tối đa",
+      "customModelMaxTokensHelp": "Token tối đa cho các mô hình tùy chỉnh/tự lưu trữ.",
+      "save": "Lưu thay đổi",
+      "saving": "Đang lưu...",
+      "resetToDefaults": "Đặt lại mặc định",
+      "resetting": "Đang đặt lại...",
+      "saveSuccess": "Giới hạn token đã được cập nhật thành công.",
+      "resetSuccess": "Giới hạn token đã được đặt lại về mặc định.",
+      "errorGeneric": "Đã xảy ra lỗi. Vui lòng thử lại."
+    }
   }
 }
