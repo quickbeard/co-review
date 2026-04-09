@@ -125,11 +125,14 @@ export async function updateGitProvider(
 ): Promise<ApiResponse<GitProvider>> {
   try {
     const apiRequest = transformUpdateInputToApiRequest(input);
-    const response = await fetch(`${API_BASE_URL}/api/git-providers/${input.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(apiRequest),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/api/git-providers/${input.id}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(apiRequest),
+      },
+    );
 
     if (!response.ok) {
       const error = await parseErrorResponse(response);
