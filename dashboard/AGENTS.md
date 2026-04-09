@@ -86,7 +86,7 @@ const API_BASE_URL =
   process.env.NEXT_PUBLIC_PR_AGENT_API_URL || "http://localhost:3001";
 
 export async function getGitProviders(): Promise<ApiResponse<GitProvider[]>> {
-  const response = await fetch(`${API_BASE_URL}/api/providers`);
+  const response = await fetch(`${API_BASE_URL}/api/git-providers`);
   // ...
 }
 ```

@@ -33,7 +33,7 @@ async function parseErrorResponse(
  */
 export async function getGitProviders(): Promise<ApiResponse<GitProvider[]>> {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/providers`, {
+    const response = await fetch(`${API_BASE_URL}/api/git-providers`, {
       method: "GET",
       headers: { "Content-Type": "application/json" },
       cache: "no-store",
@@ -65,7 +65,7 @@ export async function getGitProvider(
   id: number | string,
 ): Promise<ApiResponse<GitProvider>> {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/providers/${id}`, {
+    const response = await fetch(`${API_BASE_URL}/api/git-providers/${id}`, {
       method: "GET",
       headers: { "Content-Type": "application/json" },
       cache: "no-store",
@@ -95,7 +95,7 @@ export async function createGitProvider(
 ): Promise<ApiResponse<GitProvider>> {
   try {
     const apiRequest = transformCreateInputToApiRequest(input);
-    const response = await fetch(`${API_BASE_URL}/api/providers`, {
+    const response = await fetch(`${API_BASE_URL}/api/git-providers`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(apiRequest),
@@ -125,11 +125,14 @@ export async function updateGitProvider(
 ): Promise<ApiResponse<GitProvider>> {
   try {
     const apiRequest = transformUpdateInputToApiRequest(input);
-    const response = await fetch(`${API_BASE_URL}/api/providers/${input.id}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(apiRequest),
-    });
+    const response = await fetch(
+      `${API_BASE_URL}/api/git-providers/${input.id}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(apiRequest),
+      },
+    );
 
     if (!response.ok) {
       const error = await parseErrorResponse(response);
@@ -154,7 +157,7 @@ export async function deleteGitProvider(
   id: number | string,
 ): Promise<ApiResponse<void>> {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/providers/${id}`, {
+    const response = await fetch(`${API_BASE_URL}/api/git-providers/${id}`, {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
     });
@@ -182,7 +185,7 @@ export async function toggleGitProviderStatus(
   isActive: boolean,
 ): Promise<ApiResponse<GitProvider>> {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/providers/${id}`, {
+    const response = await fetch(`${API_BASE_URL}/api/git-providers/${id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ is_active: isActive }),

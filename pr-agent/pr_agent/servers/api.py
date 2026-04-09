@@ -88,7 +88,7 @@ def health_check() -> dict[str, str]:
 # Git Providers CRUD
 # =============================================================================
 
-@app.get("/api/providers", response_model=list[GitProviderPublic])
+@app.get("/api/git-providers", response_model=list[GitProviderPublic])
 def list_providers(
     session: SessionDep,
     skip: Annotated[int, Query(ge=0)] = 0,
@@ -100,7 +100,7 @@ def list_providers(
     return list(providers)
 
 
-@app.get("/api/providers/{provider_id}", response_model=GitProviderPublic)
+@app.get("/api/git-providers/{provider_id}", response_model=GitProviderPublic)
 def get_provider(
     provider_id: int,
     session: SessionDep,
@@ -112,7 +112,7 @@ def get_provider(
     return provider
 
 
-@app.post("/api/providers", response_model=GitProviderPublic, status_code=201)
+@app.post("/api/git-providers", response_model=GitProviderPublic, status_code=201)
 def create_provider(
     provider_data: GitProviderCreate,
     session: SessionDep,
@@ -153,7 +153,7 @@ def create_provider(
     return provider
 
 
-@app.put("/api/providers/{provider_id}", response_model=GitProviderPublic)
+@app.put("/api/git-providers/{provider_id}", response_model=GitProviderPublic)
 def update_provider(
     provider_id: int,
     provider_data: GitProviderUpdate,
@@ -180,7 +180,7 @@ def update_provider(
     return provider
 
 
-@app.patch("/api/providers/{provider_id}", response_model=GitProviderPublic)
+@app.patch("/api/git-providers/{provider_id}", response_model=GitProviderPublic)
 def patch_provider(
     provider_id: int,
     provider_data: GitProviderUpdate,
@@ -190,7 +190,7 @@ def patch_provider(
     return update_provider(provider_id, provider_data, session)
 
 
-@app.delete("/api/providers/{provider_id}")
+@app.delete("/api/git-providers/{provider_id}")
 def delete_provider(
     provider_id: int,
     session: SessionDep,
