@@ -49,50 +49,103 @@ const providerTypes: { value: LLMProviderType; label: string }[] = [
 // For these models, custom_model_max_tokens is not needed
 const KNOWN_MODELS = new Set([
   // OpenAI
-  "gpt-3.5-turbo", "gpt-3.5-turbo-0125", "gpt-3.5-turbo-0613", "gpt-3.5-turbo-1106",
-  "gpt-3.5-turbo-16k", "gpt-3.5-turbo-16k-0613",
-  "gpt-4", "gpt-4-0613", "gpt-4-32k", "gpt-4-1106-preview", "gpt-4-0125-preview",
-  "gpt-4o", "gpt-4o-2024-05-13", "gpt-4o-2024-08-06", "gpt-4o-2024-11-20",
-  "gpt-4o-mini", "gpt-4o-mini-2024-07-18",
-  "gpt-4-turbo", "gpt-4-turbo-preview", "gpt-4-turbo-2024-04-09",
-  "gpt-4.5-preview", "gpt-4.5-preview-2025-02-27",
-  "gpt-4.1", "gpt-4.1-2025-04-14", "gpt-4.1-mini", "gpt-4.1-mini-2025-04-14",
-  "gpt-4.1-nano", "gpt-4.1-nano-2025-04-14",
-  "o1", "o1-mini", "o1-preview", "o1-2024-12-17", "o1-mini-2024-09-12", "o1-preview-2024-09-12",
-  "o3", "o3-mini", "o3-2025-04-16", "o3-mini-2025-01-31",
-  "o4-mini", "o4-mini-2025-04-16",
+  "gpt-3.5-turbo",
+  "gpt-3.5-turbo-0125",
+  "gpt-3.5-turbo-0613",
+  "gpt-3.5-turbo-1106",
+  "gpt-3.5-turbo-16k",
+  "gpt-3.5-turbo-16k-0613",
+  "gpt-4",
+  "gpt-4-0613",
+  "gpt-4-32k",
+  "gpt-4-1106-preview",
+  "gpt-4-0125-preview",
+  "gpt-4o",
+  "gpt-4o-2024-05-13",
+  "gpt-4o-2024-08-06",
+  "gpt-4o-2024-11-20",
+  "gpt-4o-mini",
+  "gpt-4o-mini-2024-07-18",
+  "gpt-4-turbo",
+  "gpt-4-turbo-preview",
+  "gpt-4-turbo-2024-04-09",
+  "gpt-4.5-preview",
+  "gpt-4.5-preview-2025-02-27",
+  "gpt-4.1",
+  "gpt-4.1-2025-04-14",
+  "gpt-4.1-mini",
+  "gpt-4.1-mini-2025-04-14",
+  "gpt-4.1-nano",
+  "gpt-4.1-nano-2025-04-14",
+  "o1",
+  "o1-mini",
+  "o1-preview",
+  "o1-2024-12-17",
+  "o1-mini-2024-09-12",
+  "o1-preview-2024-09-12",
+  "o3",
+  "o3-mini",
+  "o3-2025-04-16",
+  "o3-mini-2025-01-31",
+  "o4-mini",
+  "o4-mini-2025-04-16",
   // Anthropic/Claude
-  "claude-instant-1", "claude-2", "claude-3-5-sonnet",
-  "anthropic/claude-3-opus-20240229", "anthropic/claude-3-5-sonnet-20240620",
-  "anthropic/claude-3-5-sonnet-20241022", "anthropic/claude-3-7-sonnet-20250219",
-  "anthropic/claude-3-5-haiku-20241022", "anthropic/claude-haiku-4-5-20251001",
-  "anthropic/claude-opus-4-20250514", "anthropic/claude-opus-4-5-20251101",
-  "anthropic/claude-sonnet-4-20250514", "anthropic/claude-sonnet-4-5-20250929",
-  "anthropic/claude-opus-4-6", "anthropic/claude-sonnet-4-6",
+  "claude-instant-1",
+  "claude-2",
+  "claude-3-5-sonnet",
+  "anthropic/claude-3-opus-20240229",
+  "anthropic/claude-3-5-sonnet-20240620",
+  "anthropic/claude-3-5-sonnet-20241022",
+  "anthropic/claude-3-7-sonnet-20250219",
+  "anthropic/claude-3-5-haiku-20241022",
+  "anthropic/claude-haiku-4-5-20251001",
+  "anthropic/claude-opus-4-20250514",
+  "anthropic/claude-opus-4-5-20251101",
+  "anthropic/claude-sonnet-4-20250514",
+  "anthropic/claude-sonnet-4-5-20250929",
+  "anthropic/claude-opus-4-6",
+  "anthropic/claude-sonnet-4-6",
   // Vertex AI
-  "vertex_ai/gemini-1.5-pro", "vertex_ai/gemini-1.5-flash", "vertex_ai/gemini-2.0-flash",
-  "vertex_ai/gemini-2.5-pro", "vertex_ai/gemini-2.5-flash",
-  "vertex_ai/claude-3-5-sonnet@20240620", "vertex_ai/claude-3-5-sonnet-v2@20241022",
+  "vertex_ai/gemini-1.5-pro",
+  "vertex_ai/gemini-1.5-flash",
+  "vertex_ai/gemini-2.0-flash",
+  "vertex_ai/gemini-2.5-pro",
+  "vertex_ai/gemini-2.5-flash",
+  "vertex_ai/claude-3-5-sonnet@20240620",
+  "vertex_ai/claude-3-5-sonnet-v2@20241022",
   // Gemini
-  "gemini/gemini-1.5-pro", "gemini/gemini-1.5-flash", "gemini/gemini-2.0-flash",
-  "gemini/gemini-2.5-pro", "gemini/gemini-2.5-flash",
+  "gemini/gemini-1.5-pro",
+  "gemini/gemini-1.5-flash",
+  "gemini/gemini-2.0-flash",
+  "gemini/gemini-2.5-pro",
+  "gemini/gemini-2.5-flash",
   // Bedrock
   "bedrock/anthropic.claude-3-sonnet-20240229-v1:0",
   "bedrock/anthropic.claude-3-5-sonnet-20240620-v1:0",
   "bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0",
   // DeepSeek
-  "deepseek/deepseek-chat", "deepseek/deepseek-reasoner",
+  "deepseek/deepseek-chat",
+  "deepseek/deepseek-reasoner",
   // Groq
-  "groq/llama-3.3-70b-versatile", "groq/llama-3.1-8b-instant",
+  "groq/llama-3.3-70b-versatile",
+  "groq/llama-3.1-8b-instant",
   // xAI
-  "xai/grok-2", "xai/grok-2-latest", "xai/grok-3", "xai/grok-3-mini",
+  "xai/grok-2",
+  "xai/grok-2-latest",
+  "xai/grok-3",
+  "xai/grok-3-mini",
   // Ollama (basic)
   "ollama/llama3",
   // Mistral
-  "mistral/mistral-large-latest", "mistral/mistral-small-latest",
+  "mistral/mistral-large-latest",
+  "mistral/mistral-small-latest",
 ]);
 
-export function LLMProviderForm({ provider, lang, tokenLimits }: LLMProviderFormProps) {
+export function LLMProviderForm({
+  provider,
+  lang,
+  tokenLimits,
+}: LLMProviderFormProps) {
   const dict = useDictionary();
   const router = useRouter();
   const isEdit = !!provider;
@@ -977,7 +1030,9 @@ export function LLMProviderForm({ provider, lang, tokenLimits }: LLMProviderForm
               type="number"
               min={0}
               value={maxDescriptionTokens}
-              onChange={(e) => setMaxDescriptionTokens(parseInt(e.target.value, 10) || 0)}
+              onChange={(e) =>
+                setMaxDescriptionTokens(parseInt(e.target.value, 10) || 0)
+              }
               disabled={pending}
             />
             <p className="text-sm text-muted-foreground">
@@ -994,7 +1049,9 @@ export function LLMProviderForm({ provider, lang, tokenLimits }: LLMProviderForm
               type="number"
               min={0}
               value={maxCommitsTokens}
-              onChange={(e) => setMaxCommitsTokens(parseInt(e.target.value, 10) || 0)}
+              onChange={(e) =>
+                setMaxCommitsTokens(parseInt(e.target.value, 10) || 0)
+              }
               disabled={pending}
             />
             <p className="text-sm text-muted-foreground">
@@ -1013,7 +1070,9 @@ export function LLMProviderForm({ provider, lang, tokenLimits }: LLMProviderForm
                 type="number"
                 min={0}
                 value={maxModelTokens}
-                onChange={(e) => setMaxModelTokens(parseInt(e.target.value, 10) || 0)}
+                onChange={(e) =>
+                  setMaxModelTokens(parseInt(e.target.value, 10) || 0)
+                }
                 disabled={pending}
               />
               <p className="text-sm text-muted-foreground">
@@ -1033,7 +1092,9 @@ export function LLMProviderForm({ provider, lang, tokenLimits }: LLMProviderForm
                 type="number"
                 min={0}
                 value={customModelMaxTokens}
-                onChange={(e) => setCustomModelMaxTokens(parseInt(e.target.value, 10) || 0)}
+                onChange={(e) =>
+                  setCustomModelMaxTokens(parseInt(e.target.value, 10) || 0)
+                }
                 disabled={pending}
               />
               <p className="text-sm text-muted-foreground">
