@@ -139,73 +139,73 @@ export function TokenLimitsForm({ initialLimits }: TokenLimitsFormProps) {
       </CardHeader>
 
       <CardContent className="space-y-6">
-          {/* Success message */}
-          {success && (
-            <div className="rounded-md border border-green-500/50 bg-green-500/10 p-3 text-sm text-green-700 dark:text-green-400">
-              {success}
-            </div>
-          )}
-
-          {/* Error message */}
-          {error && (
-            <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
-              {error}
-            </div>
-          )}
-
-          {/* Token limit fields */}
-          <div className="grid gap-6 sm:grid-cols-2">
-            {fields.map(({ key, labelKey, descKey }) => (
-              <div key={key} className="space-y-2">
-                <Label htmlFor={key}>
-                  {dict.tokenLimits.form[labelKey] as string}
-                </Label>
-                <Input
-                  id={key}
-                  type="number"
-                  min={0}
-                  value={limits[key]}
-                  onChange={handleInputChange(key)}
-                  disabled={pending || resetting}
-                />
-                <p className="text-sm text-muted-foreground">
-                  {dict.tokenLimits.form[descKey] as string}
-                </p>
-              </div>
-            ))}
+        {/* Success message */}
+        {success && (
+          <div className="rounded-md border border-green-500/50 bg-green-500/10 p-3 text-sm text-green-700 dark:text-green-400">
+            {success}
           </div>
+        )}
 
-          {/* Actions */}
-          <div className="flex flex-wrap items-center gap-3">
-            <Button onClick={handleSave} disabled={pending || !hasChanges}>
-              {pending ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {dict.tokenLimits.form.saving}
-                </>
-              ) : (
-                dict.tokenLimits.form.save
-              )}
-            </Button>
-            <Button
-              variant="outline"
-              onClick={handleReset}
-              disabled={resetting || pending}
-            >
-              {resetting ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  {dict.tokenLimits.form.resetting}
-                </>
-              ) : (
-                <>
-                  <RotateCcw className="mr-2 h-4 w-4" />
-                  {dict.tokenLimits.form.resetToDefaults}
-                </>
-              )}
-            </Button>
+        {/* Error message */}
+        {error && (
+          <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+            {error}
           </div>
-        </CardContent>
+        )}
+
+        {/* Token limit fields */}
+        <div className="grid gap-6 sm:grid-cols-2">
+          {fields.map(({ key, labelKey, descKey }) => (
+            <div key={key} className="space-y-2">
+              <Label htmlFor={key}>
+                {dict.tokenLimits.form[labelKey] as string}
+              </Label>
+              <Input
+                id={key}
+                type="number"
+                min={0}
+                value={limits[key]}
+                onChange={handleInputChange(key)}
+                disabled={pending || resetting}
+              />
+              <p className="text-sm text-muted-foreground">
+                {dict.tokenLimits.form[descKey] as string}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        {/* Actions */}
+        <div className="flex flex-wrap items-center gap-3">
+          <Button onClick={handleSave} disabled={pending || !hasChanges}>
+            {pending ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                {dict.tokenLimits.form.saving}
+              </>
+            ) : (
+              dict.tokenLimits.form.save
+            )}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={handleReset}
+            disabled={resetting || pending}
+          >
+            {resetting ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                {dict.tokenLimits.form.resetting}
+              </>
+            ) : (
+              <>
+                <RotateCcw className="mr-2 h-4 w-4" />
+                {dict.tokenLimits.form.resetToDefaults}
+              </>
+            )}
+          </Button>
+        </div>
+      </CardContent>
     </Card>
   );
 }
