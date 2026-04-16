@@ -46,3 +46,4 @@ giteapy==1.0.8
 # langchain-openai==0.1.20
 sqlmodel>=0.0.22
 alembic>=1.13.0
+mem0ai>=0.1.95
