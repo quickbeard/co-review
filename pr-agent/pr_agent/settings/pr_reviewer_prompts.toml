@@ -69,6 +69,17 @@ Extra instructions from the user:
 ======
 {% endif %}
 
+{%- if repo_learnings_summary %}
+
+### REPOSITORY-SPECIFIC LEARNINGS & PREFERENCES
+======
+{{ repo_learnings_summary }}
+======
+
+When these repository-specific learnings conflict with generic best practices, prioritize these learnings for this repository.
+If learnings conflict with each other, prioritize the most recent/most specific guidance.
+{%- endif %}
+
 
 The output must be a YAML object equivalent to type $PRReview, according to the following Pydantic definitions:
 =====
