@@ -22,6 +22,7 @@ from pr_agent.git_providers import (get_git_provider,
 from pr_agent.git_providers.git_provider import (IncrementalPR,
                                                  get_main_pr_language)
 from pr_agent.log import get_logger
+from pr_agent.memory_providers import get_memory_provider
 from pr_agent.servers.help import HelpMessage
 from pr_agent.tools.ticket_pr_compliance_check import (
     extract_and_cache_pr_tickets, extract_tickets)
@@ -99,14 +100,94 @@ class PRReviewer:
             "related_tickets": get_settings().get('related_tickets', []),
             'duplicate_prompt_examples': get_settings().config.get('duplicate_prompt_examples', False),
             "date": datetime.datetime.now().strftime('%Y-%m-%d'),
+            "repo_learnings_summary": "",
+            "repo_learnings_count": 0,
         }
 
-        self.token_handler = TokenHandler(
+        self.token_handler = self._create_token_handler()
+
+    def _create_token_handler(self):
+        return TokenHandler(
             self.git_provider.pr,
             self.vars,
             get_settings().pr_review_prompt.system,
-            get_settings().pr_review_prompt.user
+            get_settings().pr_review_prompt.user,
         )
+
+    def _get_repo_full_name(self) -> str:
+        repo_name = getattr(self.git_provider, "repo", "") or ""
+        if repo_name:
+            return repo_name
+
+        if "/repos/" in self.pr_url:
+            parts = self.pr_url.split("/repos/", maxsplit=1)[1].split("/")
+            if len(parts) >= 2:
+                return f"{parts[0]}/{parts[1]}"
+        return ""
+
+    def _build_learning_query(self) -> str:
+        query_parts = [
+            self.git_provider.pr.title or "",
+            self.pr_description or "",
+            self.vars.get("commit_messages_str", "") or "",
+        ]
+        combined = "\n".join([part for part in query_parts if part]).strip()
+        return combined[:3000]
+
+    @staticmethod
+    def _summarize_repo_learnings(learnings, max_items: int = 5, max_chars: int = 1200) -> str:
+        if not learnings:
+            return ""
+
+        def sort_key(item):
+            created_at = item.created_at
+            if created_at:
+                return created_at
+            return datetime.datetime.min
+
+        ordered = sorted(learnings, key=sort_key, reverse=True)[:max_items]
+        lines: list[str] = []
+        for item in ordered:
+            text = (item.text or "").strip()
+            if not text:
+                continue
+            line = f"- {text}"
+            lines.append(line)
+            if len("\n".join(lines)) > max_chars:
+                break
+        summary = "\n".join(lines).strip()
+        return summary[:max_chars]
+
+    def _apply_repository_learnings(self):
+        kb_enabled = get_settings().get("knowledge_base.enabled", False)
+        apply_to_review = get_settings().get("knowledge_base.apply_to_review", True)
+        if not kb_enabled or not apply_to_review:
+            return
+
+        repo_full_name = self._get_repo_full_name()
+        if not repo_full_name:
+            return
+
+        memory_provider = get_memory_provider()
+        if not memory_provider.is_enabled():
+            return
+
+        limit = int(get_settings().get("knowledge_base.max_retrieved_learnings", 5))
+        summary_chars = int(get_settings().get("knowledge_base.max_summary_chars", 1200))
+        query_text = self._build_learning_query()
+        learnings = memory_provider.get_repo_learnings(repo_full_name, query_text, limit=limit)
+        if not learnings:
+            return
+
+        summary = self._summarize_repo_learnings(learnings, max_items=limit, max_chars=summary_chars)
+        if not summary:
+            return
+
+        self.vars["repo_learnings_summary"] = summary
+        self.vars["repo_learnings_count"] = len(learnings)
+        # Rebuild token accounting after learnings are injected.
+        self.token_handler = self._create_token_handler()
+        get_logger().info(f"Applied {len(learnings)} repository learnings to review prompt")
 
     def parse_incremental(self, args: List[str]):
         is_incremental = False
@@ -138,6 +219,7 @@ class PRReviewer:
 
             # ticket extraction if exists
             await extract_and_cache_pr_tickets(self.git_provider, self.vars)
+            self._apply_repository_learnings()
 
             if self.incremental.is_incremental and hasattr(self.git_provider, "unreviewed_files_set") and not self.git_provider.unreviewed_files_set:
                 get_logger().info(f"Incremental review is enabled for {self.pr_url} but there are no new files")
