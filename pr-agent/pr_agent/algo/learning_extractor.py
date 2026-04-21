@@ -65,14 +65,11 @@ def extract_explicit_learning(
 ) -> str | None:
     """Explicit extractor for the `/learn <text>` command path.
 
-    Strips the leading command token and returns the remaining text only if it
-    still looks like a preference (reuses `PREFERENCE_MARKERS`). Returns `None`
-    when the comment is too short or does not match any marker, so the caller
-    can respond with a helpful rejection message.
-
-    The marker gate is intentional: until we ship per-user permissions, the
-    flag + marker combination is the only line of defence against someone
-    typing `/learn lol` and polluting the knowledge base.
+    Strips the leading command token and returns whatever non-empty text
+    remains. The explicit command is treated as a trusted signal: if a user
+    types `/learn`, we store what they typed verbatim. A future administrator
+    opt-out (via the Dashboard) may attach a ruleset that would be enforced
+    here, but today there is no content gate beyond "non-empty".
     """
     if not comment_body or not isinstance(comment_body, str):
         return None
@@ -85,10 +82,7 @@ def extract_explicit_learning(
     if text.lower().startswith(lowered_cmd):
         text = text[len(lowered_cmd):].lstrip(" :,-").strip()
 
-    if len(text) < MIN_LEARNING_LENGTH:
-        return None
-
-    if not contains_preference_marker(text):
+    if not text:
         return None
 
     return text
