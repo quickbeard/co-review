@@ -114,13 +114,40 @@ def _should_capture_learning(comment_body: str) -> bool:
         return False
     if not get_settings().get("knowledge_base.enabled", False):
         return False
-    if not get_settings().get("knowledge_base.capture_from_pr_comments", True):
+    # Default flipped to False as part of deprecating the passive capture path
+    # in favour of the explicit /learn command.
+    if not get_settings().get("knowledge_base.capture_from_pr_comments", False):
         return False
     if not get_settings().get("knowledge_base.require_agent_mention", True):
         return True
     app_name = get_settings().get("github.app_name", "pr-agent")
     mention = f"@{app_name.lower()}"
     return mention in comment_body.lower()
+
+
+def _stash_learn_context(body: Dict[str, Any], comment_body: str) -> None:
+    """Publish comment metadata into settings for the ``/learn`` tool.
+
+    This runs for every PR comment (including non-command comments) so the
+    tool can rely on settings alone without the webhook body leaking into the
+    dispatcher. Kept lightweight: only scalar fields.
+    """
+    comment_data = body.get("comment", {}) or {}
+    issue_data = body.get("issue", {}) or {}
+    pr_data = body.get("pull_request", {}) or {}
+    repo_full_name = (body.get("repository", {}) or {}).get("full_name", "")
+    context_payload = {
+        "raw_comment_body": comment_body or "",
+        "comment_id": comment_data.get("id"),
+        "parent_comment_id": comment_data.get("in_reply_to_id"),
+        "file_path": comment_data.get("path"),
+        "line": comment_data.get("line"),
+        "side": comment_data.get("side"),
+        "sender_login": (body.get("sender", {}) or {}).get("login"),
+        "pr_number": issue_data.get("number") or pr_data.get("number"),
+        "repo_full_name": repo_full_name,
+    }
+    get_settings().set("learn_context", context_payload)
 
 
 async def _capture_repo_learning(
@@ -130,6 +157,11 @@ async def _capture_repo_learning(
 ):
     if not _should_capture_learning(comment_body):
         return
+
+    get_logger().warning(
+        "Passive @<app> learning capture is deprecated; prefer the /learn "
+        "command. This path will be removed in a follow-up release."
+    )
 
     app_name = get_settings().get("github.app_name", "pr-agent")
     sender_login = (body.get("sender", {}) or {}).get("login", "")
@@ -146,7 +178,17 @@ async def _capture_repo_learning(
 
     comment_data = body.get("comment", {})
     metadata = {
-        "source_type": "review_comment" if "pull_request_url" in comment_data else "issue_comment",
+        # Unified schema with the /learn tool so the dashboard can render
+        # both sources identically. Passive captures already passed the
+        # preference marker gate, so we flag them as already refined.
+        "source_type": "passive_capture",
+        "trigger": "agent_mention",
+        "status": "refined",
+        "raw_comment": comment_body,
+        "refined_text": learning_text,
+        "refine_attempts": 0,
+        "last_refine_error": None,
+        "comment_shape": "review_comment" if "pull_request_url" in comment_data else "issue_comment",
         "pr_number": body.get("issue", {}).get("number")
         or body.get("pull_request", {}).get("number"),
         "comment_id": comment_data.get("id"),
@@ -196,6 +238,12 @@ async def handle_comments_on_pr(body: Dict[str, Any],
             await _capture_repo_learning(body, api_url, comment_body)
             get_logger().info("Ignoring comment not starting with /")
             return {}
+
+    # Make rich comment context available to slash-command tools (notably
+    # ``/learn``) without changing the ``handle_request`` signature. Tools read
+    # this via ``get_settings().learn_context``. Kept minimal to avoid leaking
+    # webhook payload into unrelated tools.
+    _stash_learn_context(body, comment_body)
     disable_eyes = False
     if "issue" in body and "pull_request" in body["issue"] and "url" in body["issue"]["pull_request"]:
         api_url = body["issue"]["pull_request"]["url"]

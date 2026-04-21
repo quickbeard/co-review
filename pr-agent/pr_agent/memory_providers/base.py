@@ -24,7 +24,8 @@ class MemoryProvider(Protocol):
         repo_full_name: str,
         learning_text: str,
         metadata: dict[str, Any] | None = None,
-    ) -> bool:
+    ) -> str | None:
+        """Persist a learning. Return the storage id on success, None on failure."""
         ...
 
     def get_repo_learnings(

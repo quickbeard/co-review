@@ -293,18 +293,37 @@
       "repo": "Kho lưu trữ",
       "allRepos": "Tất cả kho lưu trữ",
       "limit": "Giới hạn",
-      "refresh": "Làm mới"
+      "refresh": "Làm mới",
+      "sourceType": "Loại nguồn",
+      "allSources": "Tất cả nguồn",
+      "status": "Trạng thái",
+      "allStatuses": "Tất cả trạng thái"
     },
     "table": {
       "repo": "Kho lưu trữ",
       "learning": "Bài học",
       "createdAt": "Ngày thu thập",
       "source": "Nguồn",
+      "status": "Trạng thái",
       "actions": "Hành động"
     },
     "source": {
       "pr": "PR #{pr}",
       "unknown": "—"
+    },
+    "sourceType": {
+      "explicit_learn": "Lệnh /learn",
+      "passive_capture": "@-nhắc (cũ)",
+      "manual_import": "Nhập thủ công",
+      "unknown": "Không rõ"
+    },
+    "status": {
+      "raw": "Đang tinh chỉnh",
+      "refined": "Sẵn sàng",
+      "rejected": "Bị từ chối",
+      "raw_tooltip": "Đã lưu nguyên văn. Tác vụ nền sẽ tinh chỉnh trước khi áp dụng vào review.",
+      "refined_tooltip": "Sẵn sàng áp dụng cho các review tiếp theo.",
+      "rejected_tooltip": "Đã bị từ chối trong quá trình tinh chỉnh. Hãy xem lại hoặc xóa."
     },
     "actions": {
       "delete": "Xóa",
