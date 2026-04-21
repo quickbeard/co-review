@@ -15,10 +15,6 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-# Generate Prisma client (provide dummy DATABASE_URL for build time)
-ENV DATABASE_URL="postgresql://dummy:dummy@localhost:5432/dummy"
-RUN bunx prisma generate
-
 # Build the application
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN bun run build
@@ -39,10 +35,6 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-# Copy Prisma files for migrations (including config and all dependencies)
-COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/prisma.config.ts ./prisma.config.ts
-COPY --from=builder /app/generated ./generated
 COPY --from=builder /app/node_modules ./node_modules
 
 # Copy entrypoint script
