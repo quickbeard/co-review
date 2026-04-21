@@ -11,14 +11,15 @@ knowledge base. Three input patterns are supported:
    command (rare; handled by pattern 1 if they wrap the text with the
    command). For pattern 2, the parent fetch covers the common case.
 
-The tool is deliberately conservative in stage 1:
+Design notes for stage 1:
 
-* Disabled by default (``knowledge_base.explicit_learn_enabled = false``).
-* Reuses ``PREFERENCE_MARKERS`` from ``learning_extractor`` so casual chatter
-  (``/learn thanks``) cannot enter the KB until the follow-up permissions
-  feature lands.
-* Stores raw text verbatim with ``status="raw"`` so the upcoming background
-  refinement worker has something to pick up. Dashboard blurs raw entries.
+* Enabled by default (``knowledge_base.explicit_learn_enabled = true``).
+  Administrators can disable it from the Dashboard; re-enabling it after a
+  disable will eventually require a ruleset, but that UX is a follow-up.
+* The command is treated as a trusted signal - whatever non-empty text the
+  reviewer provides is stored verbatim with ``status="raw"``. A background
+  refinement worker (stage 2) polishes the wording before reviews use it.
+* Dashboard blurs raw entries until refinement completes.
 """
 from __future__ import annotations
 
@@ -27,19 +28,11 @@ from typing import Any
 
 from pr_agent.algo.ai_handlers.base_ai_handler import BaseAiHandler
 from pr_agent.algo.ai_handlers.litellm_ai_handler import LiteLLMAIHandler
-from pr_agent.algo.learning_extractor import (
-    PREFERENCE_MARKERS,
-    extract_explicit_learning,
-)
+from pr_agent.algo.learning_extractor import extract_explicit_learning
 from pr_agent.config_loader import get_settings
 from pr_agent.git_providers import get_git_provider_with_context
 from pr_agent.log import get_logger
 from pr_agent.memory_providers import get_memory_provider
-
-
-def _preference_markers_hint() -> str:
-    shown = list(PREFERENCE_MARKERS)[:6]
-    return ", ".join(f'"{m}"' for m in shown)
 
 
 class PRLearn:
@@ -153,20 +146,21 @@ class PRLearn:
             )
             return
 
-        # ``extract_explicit_learning`` tolerates the leading command token
-        # being absent (common for the ``parent_comment`` path), so we can
-        # pass ``candidate`` directly regardless of source.
+        # ``extract_explicit_learning`` only strips the optional command
+        # token and rejects empty strings - it does not filter by content.
         learning_text = extract_explicit_learning(
             candidate,
             command_token=settings.get("knowledge_base.learn_command", "/learn"),
         )
 
         if not learning_text:
+            # Reached only if the candidate collapses to an empty string
+            # after stripping the command token (e.g. ``/learn   ``).
             self._publish(
-                "This comment does not look like a project preference, so I "
-                "did not store it. I only capture phrasing that contains "
-                f"markers such as {_preference_markers_hint()}. If this is a "
-                "false negative, please rephrase the preference and try again."
+                "I could not find any learning text in your comment. "
+                "Please post the preference with the command "
+                "(`/learn We prefer X over Y ...`) or reply `/learn` to a "
+                "comment that already contains the preference."
             )
             return
 

@@ -219,11 +219,11 @@ scope = "local"
 capture_from_pr_comments = false
 apply_to_review = true
 require_agent_mention = true
-# Explicit `/learn` command. OFF by default. Enabling it gates captures
-# behind `PREFERENCE_MARKERS` in `pr_agent/algo/learning_extractor.py` so
-# `/learn lol` cannot pollute the knowledge base. Per-user permissions will
-# land in a follow-up; until then the marker list is the guardrail.
-explicit_learn_enabled = false
+# Explicit `/learn` command. ON by default - reviewers can capture learnings
+# verbatim with a single command. When an administrator disables this via the
+# Dashboard, a ruleset (reusing the extraction markers) will be required to
+# re-enable automatic capture. That ruleset UX lands in a follow-up.
+explicit_learn_enabled = true
 learn_command = "/learn"
 # Reserved for the stage 2 background refinement worker - unused by stage 1.
 duplicate_threshold = 0.9
