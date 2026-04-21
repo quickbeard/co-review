@@ -7,6 +7,7 @@ import {
   Trash2,
   GitBranch,
   Loader2,
+  Sparkles,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +25,8 @@ import {
   getLearnings,
   type Learning,
   type LearningsResponse,
+  type LearningSourceType,
+  type LearningStatus,
 } from "@/lib/api/learnings";
 
 interface LearningsViewProps {
@@ -55,6 +58,14 @@ function getSourceLabel(
   return unknownLabel;
 }
 
+const STATUS_OPTIONS: LearningStatus[] = ["raw", "refined", "rejected"];
+const SOURCE_OPTIONS: LearningSourceType[] = [
+  "explicit_learn",
+  "passive_capture",
+  "manual_import",
+  "unknown",
+];
+
 export function LearningsView({ initial, initialError }: LearningsViewProps) {
   const dict = useDictionary();
 
@@ -63,6 +74,10 @@ export function LearningsView({ initial, initialError }: LearningsViewProps) {
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [repoFilter, setRepoFilter] = useState<string>("");
+  const [sourceFilter, setSourceFilter] = useState<LearningSourceType | "">(
+    "",
+  );
+  const [statusFilter, setStatusFilter] = useState<LearningStatus | "">("");
   const [limit, setLimit] = useState<number>(100);
 
   const fetchLearnings = useCallback(async () => {
@@ -81,8 +96,8 @@ export function LearningsView({ initial, initialError }: LearningsViewProps) {
   }, [repoFilter, limit, dict.learnings.apiError]);
 
   useEffect(() => {
-    // Re-fetch whenever filters change, but skip the very first render when
-    // we already have server-rendered `initial` data for the default filters.
+    // Re-fetch whenever repo filter or limit changes. The source/status
+    // filters are applied client-side so we do not re-hit the API for them.
     if (initial && repoFilter === "" && limit === 100) return;
     void fetchLearnings();
   }, [repoFilter, limit, fetchLearnings, initial]);
@@ -103,6 +118,16 @@ export function LearningsView({ initial, initialError }: LearningsViewProps) {
   const items = data?.items ?? [];
   const repos = data?.repos ?? [];
   const enabled = data?.enabled ?? true;
+
+  const visibleItems = useMemo(
+    () =>
+      items.filter((item) => {
+        if (sourceFilter && item.sourceType !== sourceFilter) return false;
+        if (statusFilter && item.status !== statusFilter) return false;
+        return true;
+      }),
+    [items, sourceFilter, statusFilter],
+  );
 
   const stats = useMemo(
     () => ({
@@ -153,7 +178,7 @@ export function LearningsView({ initial, initialError }: LearningsViewProps) {
       </div>
 
       <div className="flex flex-col gap-3 rounded-lg border border-border bg-background p-4 sm:flex-row sm:items-end sm:justify-between">
-        <div className="flex flex-col gap-3 sm:flex-row">
+        <div className="flex flex-wrap gap-3">
           <div className="flex flex-col gap-1">
             <label
               htmlFor="learnings-repo-filter"
@@ -171,6 +196,52 @@ export function LearningsView({ initial, initialError }: LearningsViewProps) {
               {repos.map((r) => (
                 <option key={r} value={r}>
                   {r}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label
+              htmlFor="learnings-source-filter"
+              className="text-xs font-medium text-muted-foreground"
+            >
+              {dict.learnings.filters.sourceType}
+            </label>
+            <select
+              id="learnings-source-filter"
+              value={sourceFilter}
+              onChange={(e) =>
+                setSourceFilter(e.target.value as LearningSourceType | "")
+              }
+              className="h-9 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+            >
+              <option value="">{dict.learnings.filters.allSources}</option>
+              {SOURCE_OPTIONS.map((s) => (
+                <option key={s} value={s}>
+                  {dict.learnings.sourceType[s]}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-1">
+            <label
+              htmlFor="learnings-status-filter"
+              className="text-xs font-medium text-muted-foreground"
+            >
+              {dict.learnings.filters.status}
+            </label>
+            <select
+              id="learnings-status-filter"
+              value={statusFilter}
+              onChange={(e) =>
+                setStatusFilter(e.target.value as LearningStatus | "")
+              }
+              className="h-9 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 dark:bg-input/30"
+            >
+              <option value="">{dict.learnings.filters.allStatuses}</option>
+              {STATUS_OPTIONS.map((s) => (
+                <option key={s} value={s}>
+                  {dict.learnings.status[s]}
                 </option>
               ))}
             </select>
@@ -211,7 +282,7 @@ export function LearningsView({ initial, initialError }: LearningsViewProps) {
         </Button>
       </div>
 
-      {items.length === 0 ? (
+      {visibleItems.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-border p-10 text-center">
           <Lightbulb className="size-10 text-muted-foreground" />
           <h3 className="mt-3 text-lg font-medium text-foreground">
@@ -230,7 +301,10 @@ export function LearningsView({ initial, initialError }: LearningsViewProps) {
                   {dict.learnings.table.repo}
                 </TableHead>
                 <TableHead>{dict.learnings.table.learning}</TableHead>
-                <TableHead className="w-[120px]">
+                <TableHead className="w-[140px]">
+                  {dict.learnings.table.status}
+                </TableHead>
+                <TableHead className="w-[140px]">
                   {dict.learnings.table.source}
                 </TableHead>
                 <TableHead className="w-[180px]">
@@ -242,7 +316,7 @@ export function LearningsView({ initial, initialError }: LearningsViewProps) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {items.map((item, idx) => (
+              {visibleItems.map((item, idx) => (
                 <TableRow key={item.id ?? `${item.repo}-${idx}`}>
                   <TableCell className="align-top font-medium">
                     {item.repo ? (
@@ -254,14 +328,25 @@ export function LearningsView({ initial, initialError }: LearningsViewProps) {
                     )}
                   </TableCell>
                   <TableCell className="whitespace-pre-wrap align-top text-sm">
-                    {item.text}
+                    <LearningText learning={item} dict={dict} />
+                  </TableCell>
+                  <TableCell className="align-top">
+                    <StatusBadge status={item.status} dict={dict} />
                   </TableCell>
                   <TableCell className="align-top text-xs text-muted-foreground">
-                    {getSourceLabel(
-                      item,
-                      dict.learnings.source.pr,
-                      dict.learnings.source.unknown,
-                    )}
+                    <div className="flex flex-col gap-1">
+                      <span>
+                        {dict.learnings.sourceType[item.sourceType] ??
+                          dict.learnings.sourceType.unknown}
+                      </span>
+                      <span>
+                        {getSourceLabel(
+                          item,
+                          dict.learnings.source.pr,
+                          dict.learnings.source.unknown,
+                        )}
+                      </span>
+                    </div>
                   </TableCell>
                   <TableCell className="align-top text-xs text-muted-foreground">
                     {formatDate(item.createdAt)}
@@ -288,5 +373,60 @@ export function LearningsView({ initial, initialError }: LearningsViewProps) {
         </div>
       )}
     </div>
+  );
+}
+
+function LearningText({
+  learning,
+  dict,
+}: {
+  learning: Learning;
+  dict: ReturnType<typeof useDictionary>;
+}) {
+  // Raw entries are blurred with a "Refining…" pill overlay so reviewers can
+  // see that something is stored but understand the wording is still pending
+  // LLM cleanup. Clicking the pill is deliberately not wired - actions that
+  // mutate a raw entry belong in a follow-up once the worker ships.
+  if (learning.status === "raw") {
+    return (
+      <div className="relative">
+        <div className="blur-sm select-none" aria-hidden="true">
+          {learning.text}
+        </div>
+        <div className="absolute inset-0 flex items-start">
+          <span
+            className="inline-flex items-center gap-1 rounded-full border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 text-xs font-medium text-amber-700 dark:text-amber-300"
+            title={dict.learnings.status.raw_tooltip}
+          >
+            <Sparkles className="size-3" />
+            {dict.learnings.status.raw}
+          </span>
+        </div>
+        <span className="sr-only">{learning.text}</span>
+      </div>
+    );
+  }
+  return <>{learning.refinedText ?? learning.text}</>;
+}
+
+function StatusBadge({
+  status,
+  dict,
+}: {
+  status: LearningStatus;
+  dict: ReturnType<typeof useDictionary>;
+}) {
+  const label = dict.learnings.status[status];
+  const tooltip = dict.learnings.status[`${status}_tooltip` as const];
+  const variant: "secondary" | "destructive" | "outline" =
+    status === "refined"
+      ? "secondary"
+      : status === "rejected"
+        ? "destructive"
+        : "outline";
+  return (
+    <Badge variant={variant} className="font-normal" title={tooltip}>
+      {label}
+    </Badge>
   );
 }

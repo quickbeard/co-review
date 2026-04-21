@@ -213,9 +213,20 @@ num_retrieved_snippets=5
 enabled = false
 provider = "mem0"
 scope = "local"
-capture_from_pr_comments = true
+# Legacy passive capture (`@<app> ...` in a PR comment). Kept for backward
+# compatibility only; flipped to off-by-default in favour of the explicit
+# `/learn` command below. Will be removed in a follow-up release.
+capture_from_pr_comments = false
 apply_to_review = true
 require_agent_mention = true
+# Explicit `/learn` command. OFF by default. Enabling it gates captures
+# behind `PREFERENCE_MARKERS` in `pr_agent/algo/learning_extractor.py` so
+# `/learn lol` cannot pollute the knowledge base. Per-user permissions will
+# land in a follow-up; until then the marker list is the guardrail.
+explicit_learn_enabled = false
+learn_command = "/learn"
+# Reserved for the stage 2 background refinement worker - unused by stage 1.
+duplicate_threshold = 0.9
 max_retrieved_learnings = 5
 max_summary_chars = 1200
 chroma_path = "./.mem0/chroma"

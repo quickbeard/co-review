@@ -293,18 +293,37 @@
       "repo": "Repository",
       "allRepos": "All repositories",
       "limit": "Limit",
-      "refresh": "Refresh"
+      "refresh": "Refresh",
+      "sourceType": "Source type",
+      "allSources": "All sources",
+      "status": "Status",
+      "allStatuses": "All statuses"
     },
     "table": {
       "repo": "Repository",
       "learning": "Learning",
       "createdAt": "Captured",
       "source": "Source",
+      "status": "Status",
       "actions": "Actions"
     },
     "source": {
       "pr": "PR #{pr}",
       "unknown": "—"
+    },
+    "sourceType": {
+      "explicit_learn": "/learn command",
+      "passive_capture": "@-mention (legacy)",
+      "manual_import": "Manual import",
+      "unknown": "Unknown"
+    },
+    "status": {
+      "raw": "Refining",
+      "refined": "Ready",
+      "rejected": "Rejected",
+      "raw_tooltip": "Stored verbatim. The background worker will refine the wording before it is shown in reviews.",
+      "refined_tooltip": "Ready to be applied in future reviews.",
+      "rejected_tooltip": "Rejected during refinement. Review or delete this entry."
     },
     "actions": {
       "delete": "Delete",

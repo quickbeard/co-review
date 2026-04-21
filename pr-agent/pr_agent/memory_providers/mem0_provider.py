@@ -100,22 +100,61 @@ class Mem0MemoryProvider:
         repo_full_name: str,
         learning_text: str,
         metadata: dict[str, Any] | None = None,
-    ) -> bool:
+    ) -> str | None:
+        """Persist a learning and return the mem0 memory id on success.
+
+        Return value shape changed from ``bool`` to ``str | None`` so the
+        caller (e.g. the ``/learn`` tool) can reference the stored record in
+        the acknowledgement message and so a future refinement worker can
+        look it up. A non-empty string denotes success; ``None`` means the
+        store failed. Callers doing a truthy check keep working unchanged.
+        """
         if not self._client or not learning_text:
-            return False
+            return None
 
         meta = dict(metadata or {})
         meta["repo"] = repo_full_name
+        meta.setdefault("status", "refined")
         meta["created_at"] = datetime.now(timezone.utc).isoformat()
 
         scope = self._repo_scope(repo_full_name)
         try:
             # mem0 uses user_id as a scope key; we map it to repository scope.
-            self._client.add(learning_text, user_id=scope, metadata=meta)
-            return True
+            response = self._client.add(learning_text, user_id=scope, metadata=meta)
         except Exception as e:
             get_logger().warning(f"Failed to store learning in Mem0: {e}")
-            return False
+            return None
+
+        memory_id = self._extract_memory_id(response)
+        return memory_id or ""  # empty string is still truthy-enough sentinel
+
+    @staticmethod
+    def _extract_memory_id(response: Any) -> str | None:
+        """Best-effort extraction of the memory id from a mem0 ``add`` result.
+
+        mem0's return shape varies across versions - sometimes a dict with
+        ``results``, sometimes a raw list, sometimes a single dict. We walk
+        the common shapes and return the first id we can find. Failures are
+        non-fatal because the caller only needs the id for UX.
+        """
+        if not response:
+            return None
+        try:
+            candidates: list[Any] = []
+            if isinstance(response, dict):
+                results = response.get("results")
+                if isinstance(results, list):
+                    candidates.extend(results)
+                elif "id" in response:
+                    candidates.append(response)
+            elif isinstance(response, list):
+                candidates.extend(response)
+            for item in candidates:
+                if isinstance(item, dict) and item.get("id"):
+                    return str(item["id"])
+        except Exception:  # defensive
+            return None
+        return None
 
     @staticmethod
     def _normalize_item(item: dict[str, Any]) -> LearningRecord:
@@ -228,3 +267,93 @@ class Mem0MemoryProvider:
         records = self.list_all_learnings(limit=1000)
         repos = {r.repo for r in records if r.repo}
         return sorted(repos)
+
+    # ------------------------------------------------------------------
+    # Refinement worker interface (stage 2 consumer; stage 1 producer only)
+    # ------------------------------------------------------------------
+
+    def list_pending_refinements(
+        self,
+        limit: int = 50,
+        max_attempts: int | None = None,
+    ) -> list[LearningRecord]:
+        """Return raw learnings awaiting background refinement.
+
+        Stage 1 populates the ``status="raw"`` metadata key; the future
+        refinement worker will consume records returned from here. When
+        ``max_attempts`` is provided, entries whose ``refine_attempts`` meets
+        or exceeds the limit are skipped so a poison record cannot stall the
+        queue forever.
+        """
+        if not self._client:
+            return []
+        records = self.list_all_learnings(limit=limit * 4 if limit else 200)
+        pending: list[LearningRecord] = []
+        for record in records:
+            meta = record.metadata or {}
+            if meta.get("status") != "raw":
+                continue
+            if max_attempts is not None:
+                attempts = int(meta.get("refine_attempts") or 0)
+                if attempts >= max_attempts:
+                    continue
+            pending.append(record)
+            if limit and len(pending) >= limit:
+                break
+        return pending
+
+    def update_learning_after_refinement(
+        self,
+        learning_id: str,
+        *,
+        refined_text: str | None,
+        status: str,
+        error: str | None = None,
+    ) -> bool:
+        """Flip a raw learning to its refined form (or mark a retry).
+
+        The worker calls this with ``status="refined"`` plus the new text, or
+        with ``status="raw"`` and an ``error`` message to bump the attempts
+        counter without changing the memory content.
+        """
+        if not self._client or not learning_id:
+            return False
+
+        try:
+            existing = self._client.get(memory_id=learning_id)
+        except Exception as e:
+            get_logger().warning(
+                f"Failed to load Mem0 learning {learning_id} for refinement: {e}"
+            )
+            return False
+
+        if not existing:
+            return False
+
+        meta = dict((existing.get("metadata") or {}))
+        meta["status"] = status
+        meta["last_refine_error"] = error
+        meta["refine_attempts"] = int(meta.get("refine_attempts") or 0) + 1
+        if status == "refined" and refined_text:
+            meta["refined_text"] = refined_text
+            meta["last_refine_error"] = None
+
+        new_text = refined_text if (status == "refined" and refined_text) else existing.get("memory")
+        try:
+            self._client.update(memory_id=learning_id, data=new_text, metadata=meta)
+            return True
+        except TypeError:
+            # Some mem0 versions use a different kwarg for the payload.
+            try:
+                self._client.update(memory_id=learning_id, metadata=meta)
+                return True
+            except Exception as e:
+                get_logger().warning(
+                    f"Failed to update Mem0 learning {learning_id}: {e}"
+                )
+                return False
+        except Exception as e:
+            get_logger().warning(
+                f"Failed to update Mem0 learning {learning_id}: {e}"
+            )
+            return False
