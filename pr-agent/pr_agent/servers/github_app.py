@@ -28,10 +28,17 @@ from pr_agent.servers.utils import DefaultDictWithTimeout, verify_signature
 
 # Load credentials from PostgreSQL database if DATABASE_URL is set
 try:
-    from pr_agent.secret_providers.postgres_provider import apply_postgres_credentials_to_config
+    from pr_agent.secret_providers.postgres_provider import (
+        apply_postgres_credentials_to_config,
+        ensure_postgres_config_loaded,
+    )
     apply_postgres_credentials_to_config()
 except Exception:
     pass  # Fall back to .secrets.toml
+
+    def ensure_postgres_config_loaded(*_args, **_kwargs) -> None:  # type: ignore[no-redef]
+        """Fallback no-op when the postgres provider is not importable."""
+        return None
 
 setup_logger(fmt=LoggingFormat.JSON, level=get_settings().get("CONFIG.LOG_LEVEL", "DEBUG"))
 base_path = os.path.dirname(os.path.dirname(os.path.realpath(__file__)))
@@ -52,6 +59,11 @@ async def handle_github_webhooks(background_tasks: BackgroundTasks, request: Req
     processing.
     """
     get_logger().debug("Received a GitHub webhook")
+
+    # Refresh DB-backed credentials/automation config so Dashboard edits take
+    # effect without restarting the webhook service. Cheap after the first call
+    # thanks to an internal TTL cache.
+    ensure_postgres_config_loaded()
 
     body = await get_body(request)
 

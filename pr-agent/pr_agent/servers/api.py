@@ -7,7 +7,7 @@ Provides CRUD endpoints for git provider management.
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from typing import Annotated
+from typing import Annotated, Any
 
 import uvicorn
 from fastapi import Depends, FastAPI, HTTPException, Query
@@ -19,6 +19,7 @@ from pr_agent.db import (
     GitProvider,
     GitProviderCreate,
     GitProviderPublic,
+    GitProviderType,
     GitProviderUpdate,
     LLMProvider,
     LLMProviderCreate,
@@ -26,9 +27,17 @@ from pr_agent.db import (
     LLMProviderUpdate,
     LLMProviderType,
     PRAgentConfig,
-    create_db_and_tables,
+    WebhookDelivery,
+    WebhookRegistration,
+    WebhookRegistrationCreate,
+    WebhookRegistrationPublic,
+    WebhookRegistrationStatus,
+    WebhookRegistrationUpdate,
     get_session,
+    init_database,
 )
+from pr_agent.memory_providers import get_memory_provider
+from pr_agent.memory_providers.base import LearningRecord
 
 # Use standard logging instead of pr_agent.log to avoid dependency issues
 import logging
@@ -48,10 +57,15 @@ SessionDep = Annotated[Session, Depends(get_session)]
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialize database tables on startup."""
-    get_logger().info("Creating database tables...")
-    create_db_and_tables()
-    get_logger().info("Database tables created successfully")
+    """Bring the database schema up to date on startup.
+
+    Delegates to `init_database`, which runs Alembic migrations against the
+    configured `DATABASE_URL`. Safe to call on every boot — it is a no-op
+    when the schema is already current.
+    """
+    get_logger().info("Running database migrations...")
+    init_database(logger=get_logger())
+    get_logger().info("Database migrations complete")
     yield
 
 
@@ -527,6 +541,673 @@ def reset_token_limits(session: SessionDep) -> TokenLimits:
     get_logger().info("Reset token limits to defaults")
 
     return TokenLimits(**DEFAULT_TOKEN_LIMITS)
+
+
+# =============================================================================
+# Learnings API (Mem0 knowledge base)
+# =============================================================================
+
+class LearningPublic(BaseModel):
+    """Public representation of a stored learning/memory."""
+
+    id: str | None = None
+    repo: str | None = None
+    text: str
+    created_at: datetime | None = None
+    metadata: dict[str, Any] = {}
+
+
+class LearningsListResponse(BaseModel):
+    """Response payload for listing learnings."""
+
+    enabled: bool
+    total: int
+    items: list[LearningPublic]
+    repos: list[str] = []
+
+
+def _record_to_public(record: LearningRecord) -> LearningPublic:
+    return LearningPublic(
+        id=record.id,
+        repo=record.repo,
+        text=record.text,
+        created_at=record.created_at,
+        metadata=record.metadata or {},
+    )
+
+
+@app.get("/api/learnings", response_model=LearningsListResponse)
+def list_learnings(
+    repo: Annotated[str | None, Query(description="Filter by repository full name (e.g. org/repo)")] = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+) -> LearningsListResponse:
+    """List learnings stored in the knowledge base (mem0).
+
+    Returns the records captured from PR review feedback. When `repo` is
+    provided, only learnings for that repository are returned.
+    """
+    provider = get_memory_provider()
+    if not provider.is_enabled():
+        return LearningsListResponse(enabled=False, total=0, items=[], repos=[])
+
+    try:
+        records = provider.list_all_learnings(repo_full_name=repo, limit=limit)
+        repos = provider.list_repos()
+    except Exception as e:  # defensive: never crash the endpoint
+        get_logger().warning(f"Failed to load learnings: {e}")
+        raise HTTPException(status_code=500, detail="Failed to load learnings") from e
+
+    return LearningsListResponse(
+        enabled=True,
+        total=len(records),
+        items=[_record_to_public(r) for r in records],
+        repos=repos,
+    )
+
+
+@app.get("/api/learnings/repos")
+def list_learning_repos() -> dict[str, Any]:
+    """Return the list of repositories that have stored learnings."""
+    provider = get_memory_provider()
+    if not provider.is_enabled():
+        return {"enabled": False, "repos": []}
+    return {"enabled": True, "repos": provider.list_repos()}
+
+
+@app.delete("/api/learnings/{learning_id}")
+def delete_learning(learning_id: str) -> dict[str, str]:
+    """Delete a single learning by its mem0 id."""
+    provider = get_memory_provider()
+    if not provider.is_enabled():
+        raise HTTPException(status_code=400, detail="Knowledge base is disabled")
+
+    if not provider.delete_learning(learning_id):
+        raise HTTPException(status_code=404, detail="Learning not found or could not be deleted")
+
+    get_logger().info(f"Deleted learning {learning_id}")
+    return {"status": "deleted", "id": learning_id}
+
+
+# =============================================================================
+# Automation API (per-provider pr_commands / push_commands / toggles)
+#
+# Lets the Dashboard edit the "auto-review when a PR is opened" behavior that
+# previously lived in .pr_agent.toml. Values are stored in JSON columns on the
+# default PRAgentConfig row and pushed into Dynaconf at webhook time by
+# `pr_agent.secret_providers.postgres_provider.apply_automation_config_to_settings`.
+# =============================================================================
+
+# Keys the Dashboard is allowed to manage per provider. Anything outside this
+# set is preserved in the JSON column but not exposed.
+#
+# Note: `disable_auto_feedback` is intentionally NOT in this set — it lives on
+# the `pr_agent_configs.disable_auto_feedback` column (added in Alembic
+# revision 0002) and is handled separately below.
+AUTOMATION_ALLOWED_KEYS: tuple[str, ...] = (
+    "pr_commands",
+    "push_commands",
+    "handle_push_trigger",
+    "handle_pr_actions",
+    "feedback_on_draft_pr",
+)
+
+# Default values surfaced when a provider has no stored config yet. Kept in
+# sync with pr_agent/settings/configuration.toml so the UI shows the actual
+# runtime defaults.
+AUTOMATION_DEFAULTS: dict[str, dict[str, Any]] = {
+    "github_app": {
+        "pr_commands": [
+            "/describe --pr_description.final_update_message=false",
+            "/review",
+            "/improve",
+        ],
+        "push_commands": ["/describe", "/review"],
+        "handle_push_trigger": False,
+        "handle_pr_actions": ["opened", "reopened", "ready_for_review"],
+        "feedback_on_draft_pr": False,
+    },
+    "gitlab": {
+        "pr_commands": [
+            "/describe --pr_description.final_update_message=false",
+            "/review",
+            "/improve",
+        ],
+        "push_commands": ["/describe", "/review"],
+        "handle_push_trigger": False,
+    },
+    "bitbucket_app": {
+        "pr_commands": [
+            "/describe --pr_description.final_update_message=false",
+            "/review",
+            "/improve --pr_code_suggestions.commitable_code_suggestions=true",
+        ],
+        "push_commands": ["/describe", "/review"],
+        "handle_push_trigger": False,
+    },
+    "azure_devops": {
+        "pr_commands": ["/describe", "/review", "/improve"],
+    },
+    "gitea": {
+        "pr_commands": ["/describe", "/review", "/improve"],
+        "push_commands": ["/describe", "/review"],
+        "handle_push_trigger": False,
+    },
+}
+
+# Mapping from API key -> PRAgentConfig JSON column name.
+AUTOMATION_COLUMN_MAP: dict[str, str] = {
+    "github_app": "github_app_config",
+    "gitlab": "gitlab_config",
+    "bitbucket_app": "bitbucket_app_config",
+    "azure_devops": "azure_devops_config",
+    "gitea": "gitea_config",
+}
+
+
+class ProviderAutomationConfig(BaseModel):
+    """Automation config for a single git provider."""
+
+    pr_commands: list[str] = []
+    push_commands: list[str] = []
+    handle_push_trigger: bool = False
+    handle_pr_actions: list[str] | None = None
+    feedback_on_draft_pr: bool | None = None
+    disable_auto_feedback: bool | None = None
+
+
+class AutomationConfigResponse(BaseModel):
+    """Full automation config surfaced to the Dashboard."""
+
+    disable_auto_feedback: bool = False
+    github_app: ProviderAutomationConfig
+    gitlab: ProviderAutomationConfig
+    bitbucket_app: ProviderAutomationConfig
+    azure_devops: ProviderAutomationConfig
+    gitea: ProviderAutomationConfig
+
+
+class AutomationConfigUpdate(BaseModel):
+    """Partial update for automation config. Missing keys leave values unchanged."""
+
+    disable_auto_feedback: bool | None = None
+    github_app: ProviderAutomationConfig | None = None
+    gitlab: ProviderAutomationConfig | None = None
+    bitbucket_app: ProviderAutomationConfig | None = None
+    azure_devops: ProviderAutomationConfig | None = None
+    gitea: ProviderAutomationConfig | None = None
+
+
+def _provider_config_from_column(
+    stored: dict[str, Any] | None,
+    defaults: dict[str, Any],
+) -> ProviderAutomationConfig:
+    """Merge stored JSON column with per-provider defaults into the API shape."""
+    merged = dict(defaults)
+    if stored:
+        for key, value in stored.items():
+            if key in AUTOMATION_ALLOWED_KEYS:
+                merged[key] = value
+    return ProviderAutomationConfig(**{k: merged.get(k) for k in merged})
+
+
+def _build_automation_response(config: PRAgentConfig) -> AutomationConfigResponse:
+    """Compose the API response from a PRAgentConfig row."""
+    return AutomationConfigResponse(
+        disable_auto_feedback=bool(config.disable_auto_feedback),
+        github_app=_provider_config_from_column(
+            config.github_app_config, AUTOMATION_DEFAULTS["github_app"]
+        ),
+        gitlab=_provider_config_from_column(
+            config.gitlab_config, AUTOMATION_DEFAULTS["gitlab"]
+        ),
+        bitbucket_app=_provider_config_from_column(
+            config.bitbucket_app_config, AUTOMATION_DEFAULTS["bitbucket_app"]
+        ),
+        azure_devops=_provider_config_from_column(
+            config.azure_devops_config, AUTOMATION_DEFAULTS["azure_devops"]
+        ),
+        gitea=_provider_config_from_column(
+            config.gitea_config, AUTOMATION_DEFAULTS["gitea"]
+        ),
+    )
+
+
+def _merge_provider_update(
+    existing: dict[str, Any] | None,
+    update: ProviderAutomationConfig,
+) -> dict[str, Any]:
+    """Produce the new JSON payload for a provider column.
+
+    Only keys in `AUTOMATION_ALLOWED_KEYS` are written; unknown keys in the
+    existing JSON are preserved verbatim so ad-hoc settings stored outside the
+    dashboard are not clobbered.
+    """
+    merged: dict[str, Any] = dict(existing or {})
+    update_dict = update.model_dump(exclude_none=True)
+    for key, value in update_dict.items():
+        if key in AUTOMATION_ALLOWED_KEYS:
+            merged[key] = value
+    return merged
+
+
+@app.get("/api/automation", response_model=AutomationConfigResponse)
+def get_automation_config(session: SessionDep) -> AutomationConfigResponse:
+    """Return the current automation config for every supported provider."""
+    config = get_or_create_default_config(session)
+    return _build_automation_response(config)
+
+
+@app.put("/api/automation", response_model=AutomationConfigResponse)
+def update_automation_config(
+    update: AutomationConfigUpdate,
+    session: SessionDep,
+) -> AutomationConfigResponse:
+    """Persist automation config changes and invalidate the webhook cache."""
+    config = get_or_create_default_config(session)
+
+    if update.disable_auto_feedback is not None:
+        config.disable_auto_feedback = update.disable_auto_feedback
+
+    provider_updates: dict[str, ProviderAutomationConfig | None] = {
+        "github_app": update.github_app,
+        "gitlab": update.gitlab,
+        "bitbucket_app": update.bitbucket_app,
+        "azure_devops": update.azure_devops,
+        "gitea": update.gitea,
+    }
+
+    for api_key, provider_update in provider_updates.items():
+        if provider_update is None:
+            continue
+        column = AUTOMATION_COLUMN_MAP[api_key]
+        existing = getattr(config, column, None)
+        new_value = _merge_provider_update(existing, provider_update)
+        setattr(config, column, new_value)
+
+    config.updated_at = datetime.now(timezone.utc)
+    session.add(config)
+    session.commit()
+    session.refresh(config)
+
+    # Best-effort cache bust so a running webhook service picks up changes on
+    # the next delivery instead of waiting for the TTL window to expire.
+    try:
+        from pr_agent.secret_providers.postgres_provider import (
+            invalidate_postgres_config_cache,
+        )
+
+        invalidate_postgres_config_cache()
+    except Exception:  # defensive: never block the save
+        pass
+
+    get_logger().info("Updated automation config")
+    return _build_automation_response(config)
+
+
+@app.post("/api/automation/reload")
+def reload_automation_config() -> dict[str, str]:
+    """Force the webhook service to re-read automation config on its next call."""
+    try:
+        from pr_agent.secret_providers.postgres_provider import (
+            invalidate_postgres_config_cache,
+        )
+
+        invalidate_postgres_config_cache()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Failed to invalidate cache") from e
+    return {"status": "ok"}
+
+
+# =============================================================================
+# Webhook registry (P1)
+#
+# CRUD over `webhook_registrations` + provider-side actions
+# (register / unregister / test / deliveries). The provider adapter lives in
+# `pr_agent.servers.webhook_registry`; this layer just glues HTTP to DB.
+# =============================================================================
+
+
+def _webhook_to_public(record: WebhookRegistration) -> WebhookRegistrationPublic:
+    """Project a DB row into the public response shape (no raw secret)."""
+    return WebhookRegistrationPublic(
+        id=record.id,  # type: ignore[arg-type]
+        git_provider_id=record.git_provider_id,
+        repo=record.repo,
+        target_url=record.target_url,
+        events=list(record.events or []),
+        active=record.active,
+        content_type=record.content_type,
+        insecure_ssl=record.insecure_ssl,
+        status=record.status,
+        external_id=record.external_id,
+        has_secret=bool(record.secret),
+        last_delivery_at=record.last_delivery_at,
+        last_status_code=record.last_status_code,
+        last_error=record.last_error,
+        created_at=record.created_at,
+        updated_at=record.updated_at,
+    )
+
+
+def _get_provider_or_404(session: Session, provider_id: int) -> GitProvider:
+    provider = session.get(GitProvider, provider_id)
+    if not provider:
+        raise HTTPException(
+            status_code=404, detail=f"Git provider {provider_id} not found"
+        )
+    return provider
+
+
+def _get_webhook_or_404(
+    session: Session, webhook_id: int
+) -> WebhookRegistration:
+    record = session.get(WebhookRegistration, webhook_id)
+    if not record:
+        raise HTTPException(
+            status_code=404, detail=f"Webhook {webhook_id} not found"
+        )
+    return record
+
+
+class WebhookEndpointInfo(BaseModel):
+    """Self-reported webhook URL + recommended event list per provider type."""
+
+    provider_type: str
+    path: str
+    default_events: list[str]
+    note: str | None = None
+
+
+def _compute_endpoint_base() -> str:
+    """Derive the externally-reachable PR-Agent base URL from env.
+
+    Falls back to empty string so the Dashboard can display `<base>/path`
+    even when the admin hasn't set one (they then just copy the path part).
+    """
+    return (os.environ.get("PR_AGENT_PUBLIC_URL") or "").rstrip("/")
+
+
+@app.get("/api/webhooks/endpoints", response_model=list[WebhookEndpointInfo])
+def list_webhook_endpoints() -> list[WebhookEndpointInfo]:
+    """Return the webhook paths this PR-Agent deployment exposes."""
+    base = _compute_endpoint_base()
+
+    def _full(path: str) -> str:
+        return f"{base}{path}" if base else path
+
+    return [
+        WebhookEndpointInfo(
+            provider_type=GitProviderType.github.value,
+            path=_full("/api/v1/github_webhooks"),
+            default_events=["pull_request", "push", "issue_comment"],
+            note="For user PAT deployments. GitHub Apps deliver events via the App-level webhook.",
+        ),
+        WebhookEndpointInfo(
+            provider_type=GitProviderType.gitlab.value,
+            path=_full("/webhook"),
+            default_events=["Merge request events", "Push events", "Note events"],
+        ),
+        WebhookEndpointInfo(
+            provider_type=GitProviderType.bitbucket.value,
+            path=_full("/"),
+            default_events=["pullrequest:created", "pullrequest:updated"],
+        ),
+        WebhookEndpointInfo(
+            provider_type=GitProviderType.gitea.value,
+            path=_full("/api/v1/gitea_webhooks"),
+            default_events=["pull_request", "push"],
+        ),
+    ]
+
+
+@app.get("/api/webhooks", response_model=list[WebhookRegistrationPublic])
+def list_webhooks(
+    session: SessionDep,
+    git_provider_id: int | None = Query(
+        default=None, description="Filter by git provider id"
+    ),
+    repo: str | None = Query(
+        default=None, description="Filter by repo (exact match)"
+    ),
+) -> list[WebhookRegistrationPublic]:
+    """List webhook registrations, optionally filtered by provider or repo."""
+    stmt = select(WebhookRegistration)
+    if git_provider_id is not None:
+        stmt = stmt.where(WebhookRegistration.git_provider_id == git_provider_id)
+    if repo:
+        stmt = stmt.where(WebhookRegistration.repo == repo)
+    rows = session.exec(stmt.order_by(WebhookRegistration.id.desc())).all()
+    return [_webhook_to_public(r) for r in rows]
+
+
+@app.get(
+    "/api/webhooks/{webhook_id}", response_model=WebhookRegistrationPublic
+)
+def get_webhook(
+    webhook_id: int, session: SessionDep
+) -> WebhookRegistrationPublic:
+    return _webhook_to_public(_get_webhook_or_404(session, webhook_id))
+
+
+@app.post(
+    "/api/webhooks",
+    response_model=WebhookRegistrationPublic,
+    status_code=201,
+)
+def create_webhook(
+    payload: WebhookRegistrationCreate, session: SessionDep
+) -> WebhookRegistrationPublic:
+    """Create a webhook registration row in 'draft' state (not yet registered)."""
+    # Importing here keeps the top of api.py slimmer and avoids any import
+    # cycle with the webhook_registry module.
+    from pr_agent.servers.webhook_registry import generate_webhook_secret
+
+    _get_provider_or_404(session, payload.git_provider_id)
+
+    record = WebhookRegistration(
+        git_provider_id=payload.git_provider_id,
+        repo=payload.repo,
+        target_url=payload.target_url,
+        events=payload.events,
+        active=payload.active,
+        content_type=payload.content_type,
+        insecure_ssl=payload.insecure_ssl,
+        # If the caller didn't supply a secret, mint one so HMAC verification
+        # works out-of-the-box when they register on the provider.
+        secret=payload.secret or generate_webhook_secret(),
+        status=WebhookRegistrationStatus.draft,
+    )
+    session.add(record)
+    try:
+        session.commit()
+    except Exception as exc:  # noqa: BLE001
+        session.rollback()
+        # Most common cause: uq_webhook_registrations_provider_repo_url violation.
+        raise HTTPException(
+            status_code=409,
+            detail="A webhook for this provider + repo + URL already exists",
+        ) from exc
+    session.refresh(record)
+    return _webhook_to_public(record)
+
+
+@app.put(
+    "/api/webhooks/{webhook_id}", response_model=WebhookRegistrationPublic
+)
+def update_webhook(
+    webhook_id: int,
+    payload: WebhookRegistrationUpdate,
+    session: SessionDep,
+) -> WebhookRegistrationPublic:
+    record = _get_webhook_or_404(session, webhook_id)
+    data = payload.model_dump(exclude_unset=True)
+    for key, value in data.items():
+        setattr(record, key, value)
+    record.updated_at = datetime.now(timezone.utc)
+    session.add(record)
+    try:
+        session.commit()
+    except Exception as exc:  # noqa: BLE001
+        session.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Update would violate uniqueness on (provider, repo, url)",
+        ) from exc
+    session.refresh(record)
+    return _webhook_to_public(record)
+
+
+@app.delete("/api/webhooks/{webhook_id}", status_code=204)
+def delete_webhook(
+    webhook_id: int,
+    session: SessionDep,
+    also_unregister: bool = Query(
+        default=True,
+        description="If True, attempt to delete the webhook on the provider first",
+    ),
+) -> None:
+    """Delete a webhook row. Optionally calls the provider first to unregister."""
+    from pr_agent.servers.webhook_registry import (
+        WebhookRegistryError,
+        get_adapter,
+    )
+
+    record = _get_webhook_or_404(session, webhook_id)
+
+    if also_unregister and record.external_id:
+        provider = _get_provider_or_404(session, record.git_provider_id)
+        try:
+            get_adapter(provider.type).unregister(provider, record)
+        except WebhookRegistryError as exc:
+            # Surface the error but let the client choose to retry with
+            # also_unregister=false to force-delete the local row.
+            raise HTTPException(
+                status_code=exc.status_code, detail=str(exc)
+            ) from exc
+
+    session.delete(record)
+    session.commit()
+
+
+@app.post(
+    "/api/webhooks/{webhook_id}/register",
+    response_model=WebhookRegistrationPublic,
+)
+def register_webhook(
+    webhook_id: int, session: SessionDep
+) -> WebhookRegistrationPublic:
+    """Create the webhook on the remote provider."""
+    from pr_agent.servers.webhook_registry import (
+        WebhookRegistryError,
+        get_adapter,
+    )
+
+    record = _get_webhook_or_404(session, webhook_id)
+    provider = _get_provider_or_404(session, record.git_provider_id)
+
+    try:
+        result = get_adapter(provider.type).register(provider, record)
+    except WebhookRegistryError as exc:
+        record.status = WebhookRegistrationStatus.failed
+        record.last_error = str(exc)
+        record.updated_at = datetime.now(timezone.utc)
+        session.add(record)
+        session.commit()
+        raise HTTPException(
+            status_code=exc.status_code, detail=str(exc)
+        ) from exc
+
+    record.external_id = result.external_id or record.external_id
+    record.status = WebhookRegistrationStatus.registered
+    record.last_error = None
+    record.last_status_code = result.status_code
+    record.updated_at = datetime.now(timezone.utc)
+    session.add(record)
+    session.commit()
+    session.refresh(record)
+    return _webhook_to_public(record)
+
+
+@app.post(
+    "/api/webhooks/{webhook_id}/unregister",
+    response_model=WebhookRegistrationPublic,
+)
+def unregister_webhook(
+    webhook_id: int, session: SessionDep
+) -> WebhookRegistrationPublic:
+    """Delete the webhook on the remote provider (keep the local row)."""
+    from pr_agent.servers.webhook_registry import (
+        WebhookRegistryError,
+        get_adapter,
+    )
+
+    record = _get_webhook_or_404(session, webhook_id)
+    provider = _get_provider_or_404(session, record.git_provider_id)
+
+    try:
+        result = get_adapter(provider.type).unregister(provider, record)
+    except WebhookRegistryError as exc:
+        record.last_error = str(exc)
+        record.updated_at = datetime.now(timezone.utc)
+        session.add(record)
+        session.commit()
+        raise HTTPException(
+            status_code=exc.status_code, detail=str(exc)
+        ) from exc
+
+    record.external_id = None
+    record.status = WebhookRegistrationStatus.deleted
+    record.last_error = None
+    record.last_status_code = result.status_code
+    record.updated_at = datetime.now(timezone.utc)
+    session.add(record)
+    session.commit()
+    session.refresh(record)
+    return _webhook_to_public(record)
+
+
+@app.post("/api/webhooks/{webhook_id}/test")
+def test_webhook(webhook_id: int, session: SessionDep) -> dict[str, Any]:
+    """Ask the provider to send a test delivery."""
+    from pr_agent.servers.webhook_registry import (
+        WebhookRegistryError,
+        get_adapter,
+    )
+
+    record = _get_webhook_or_404(session, webhook_id)
+    provider = _get_provider_or_404(session, record.git_provider_id)
+
+    try:
+        result = get_adapter(provider.type).test(provider, record)
+    except WebhookRegistryError as exc:
+        raise HTTPException(
+            status_code=exc.status_code, detail=str(exc)
+        ) from exc
+
+    return {
+        "status": "ok",
+        "message": result.message,
+        "status_code": result.status_code,
+    }
+
+
+@app.get(
+    "/api/webhooks/{webhook_id}/deliveries",
+    response_model=list[WebhookDelivery],
+)
+def list_webhook_deliveries(
+    webhook_id: int,
+    session: SessionDep,
+    limit: int = Query(default=30, ge=1, le=100),
+) -> list[WebhookDelivery]:
+    """Return recent deliveries reported by the provider."""
+    from pr_agent.servers.webhook_registry import get_adapter
+
+    record = _get_webhook_or_404(session, webhook_id)
+    provider = _get_provider_or_404(session, record.git_provider_id)
+    return get_adapter(provider.type).list_deliveries(
+        provider, record, limit=limit
+    )
 
 
 # =============================================================================

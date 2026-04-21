@@ -4,8 +4,12 @@
   },
   "nav": {
     "overview": "Overview",
+    "analytics": "Analytics",
     "gitProviders": "Git Providers",
     "llmProviders": "LLM Providers",
+    "automation": "Automation",
+    "webhooks": "Webhooks",
+    "learnings": "Learnings",
     "repositories": "Repositories",
     "llmServers": "LLM Servers",
     "reviewContexts": "Review Contexts",
@@ -259,6 +263,117 @@
       "setDefault": "Set as Default"
     }
   },
+  "analytics": {
+    "title": "Analytics",
+    "description": "Engineering insights from Apache DevLake — powered by Grafana.",
+    "openInGrafana": "Open in Grafana",
+    "refresh": "Refresh",
+    "notConfigured": {
+      "title": "Grafana dashboard not configured",
+      "description": "Set the NEXT_PUBLIC_DEVLAKE_GRAFANA_URL environment variable to the embed URL of your Apache DevLake Grafana dashboard.",
+      "hint": "Example: http://localhost:3002/d/<dashboard-uid>/<slug>?orgId=1&kiosk=tv&theme=light"
+    },
+    "loadError": {
+      "title": "Unable to display the dashboard",
+      "description": "Your browser blocked the embedded Grafana instance. Check that Grafana allows embedding (allow_embedding = true) and that the URL is correct."
+    }
+  },
+  "learnings": {
+    "title": "Learnings",
+    "description": "Knowledge the AI reviewer has captured from past PR discussions.",
+    "disabled": {
+      "title": "Knowledge base disabled",
+      "description": "Enable KNOWLEDGE_BASE__ENABLED in your PR-Agent configuration to start capturing learnings."
+    },
+    "empty": {
+      "title": "No learnings yet",
+      "description": "Learnings will appear here after reviewers reply to PR review comments with guidance for the AI."
+    },
+    "filters": {
+      "repo": "Repository",
+      "allRepos": "All repositories",
+      "limit": "Limit",
+      "refresh": "Refresh"
+    },
+    "table": {
+      "repo": "Repository",
+      "learning": "Learning",
+      "createdAt": "Captured",
+      "source": "Source",
+      "actions": "Actions"
+    },
+    "source": {
+      "pr": "PR #{pr}",
+      "unknown": "—"
+    },
+    "actions": {
+      "delete": "Delete",
+      "deleting": "Deleting...",
+      "view": "View details"
+    },
+    "deleteDialog": {
+      "title": "Delete learning",
+      "description": "This will remove the learning from the knowledge base. This action cannot be undone.",
+      "cancel": "Cancel",
+      "confirm": "Delete"
+    },
+    "apiError": "Failed to connect to PR-Agent API",
+    "stats": {
+      "total": "Total learnings",
+      "repos": "Repositories covered"
+    }
+  },
+  "automation": {
+    "title": "Automation",
+    "description": "Control which PR-Agent commands run automatically when pull requests are opened or updated. Changes take effect on the next webhook delivery — no redeploy required.",
+    "global": {
+      "title": "Global switches",
+      "description": "Settings applied across every git provider.",
+      "disableAutoFeedback": "Disable all automatic feedback",
+      "disableAutoFeedbackHelp": "When enabled, PR-Agent will not run any automatic tools on new PRs or pushes. Comment triggers still work."
+    },
+    "provider": {
+      "title": "Per-provider behavior",
+      "description": "Pick which commands run automatically on each supported git provider."
+    },
+    "providers": {
+      "github": "GitHub",
+      "gitlab": "GitLab",
+      "bitbucket": "Bitbucket",
+      "azure": "Azure DevOps",
+      "gitea": "Gitea"
+    },
+    "fields": {
+      "prCommands": "Commands on PR opened",
+      "prCommandsHelp": "Run when a PR is opened, reopened, or marked ready for review. Add slash commands like /review, /describe, /improve.",
+      "prCommandsEmpty": "No commands will run automatically on new PRs.",
+      "pushCommands": "Commands on push to open PR",
+      "pushCommandsHelp": "Run when new commits are pushed to an open PR. Requires the push trigger to be enabled.",
+      "pushCommandsEmpty": "No commands will run on new pushes.",
+      "handlePushTrigger": "Enable push trigger",
+      "handlePushTriggerHelp": "Listen for commits pushed to open PRs and run the push commands above.",
+      "handlePrActions": "PR events that trigger commands",
+      "handlePrActionsHelp": "Which GitHub pull_request event types should invoke the PR commands.",
+      "feedbackOnDraft": "Run on draft PRs",
+      "feedbackOnDraftHelp": "By default PR-Agent skips draft PRs. Enable to include them.",
+      "add": "Add"
+    },
+    "actions": {
+      "save": "Save changes",
+      "saving": "Saving…",
+      "reload": "Reload webhook cache",
+      "reloadHelp": "Forces the webhook service to re-read config from the database on its next delivery."
+    },
+    "messages": {
+      "saved": "Automation config saved. Webhook service will pick up changes on the next delivery.",
+      "reloaded": "Webhook cache invalidated."
+    },
+    "errors": {
+      "loadFailed": "Failed to load automation config.",
+      "saveFailed": "Failed to save automation config.",
+      "reloadFailed": "Failed to reload webhook cache."
+    }
+  },
   "tokenLimits": {
     "title": "Token Limits",
     "description": "Configure token limits for PR descriptions, commits, and model context windows.",
@@ -278,6 +393,88 @@
       "saveSuccess": "Token limits updated successfully.",
       "resetSuccess": "Token limits reset to defaults.",
       "errorGeneric": "Something went wrong. Please try again."
+    }
+  },
+  "webhooks": {
+    "title": "Webhooks",
+    "description": "Register and manage per-repository webhooks on your git providers.",
+    "addWebhook": "Add Webhook",
+    "newTitle": "New Webhook",
+    "newDescription": "Create a draft webhook, then register it on the provider.",
+    "editTitle": "Edit Webhook",
+    "editDescription": "Update webhook configuration. Save changes before re-registering.",
+    "deleteConfirm": "Delete webhook for {repo}? This also removes it on the provider.",
+    "empty": {
+      "title": "No webhooks configured",
+      "description": "Register a webhook to start receiving events from a repository."
+    },
+    "table": {
+      "repo": "Repository",
+      "provider": "Provider",
+      "url": "Target URL",
+      "events": "Events",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "status": {
+      "draft": "Draft",
+      "registered": "Registered",
+      "failed": "Failed",
+      "deleted": "Deleted"
+    },
+    "actions": {
+      "register": "Register on provider",
+      "registering": "Registering...",
+      "unregister": "Unregister",
+      "test": "Send test ping",
+      "deliveries": "View deliveries",
+      "edit": "Edit",
+      "delete": "Delete"
+    },
+    "form": {
+      "back": "Back to webhooks",
+      "provider": "Git Provider",
+      "providerPlaceholder": "Select a provider",
+      "providerLockedNote": "Provider cannot be changed after creation. Delete and recreate to switch.",
+      "repo": "Repository",
+      "repoPlaceholder": "owner/repo",
+      "repoHint": "Format varies by provider: owner/repo (GitHub), group/project (GitLab).",
+      "targetUrl": "Target URL",
+      "useSuggested": "Use suggested URL",
+      "events": "Events",
+      "eventsHint": "Leave empty to use provider defaults. Click presets or add custom events.",
+      "eventsPlaceholder": "e.g. pull_request",
+      "eventsEmpty": "No events set - provider defaults will be used.",
+      "addEvent": "Add",
+      "contentType": "Content type",
+      "secret": "Signing secret",
+      "secretPlaceholder": "Leave blank to auto-generate",
+      "secretKeepPlaceholder": "Leave blank to keep existing",
+      "secretHintCreate": "Used by the provider to sign payloads. A random secret is generated if you leave this blank.",
+      "secretHintEdit": "Enter a new value to rotate the secret. Leave blank to keep the current one.",
+      "active": "Active",
+      "activeHint": "Inactive webhooks are stored but the provider will not deliver events.",
+      "insecureSsl": "Skip SSL verification",
+      "insecureSslHint": "Disables TLS certificate checks at the provider. Not recommended.",
+      "cancel": "Cancel",
+      "saveCreate": "Create draft",
+      "saveUpdate": "Save changes"
+    },
+    "deliveries": {
+      "title": "Recent deliveries",
+      "loading": "Loading deliveries...",
+      "empty": "No deliveries recorded yet."
+    },
+    "messages": {
+      "working": "Working...",
+      "testSent": "Test delivery dispatched."
+    },
+    "errors": {
+      "apiError": "Failed to load webhooks",
+      "actionFailed": "Action failed. Check the provider credentials and try again.",
+      "fetchDeliveriesFailed": "Failed to load deliveries.",
+      "saveFailed": "Failed to save webhook.",
+      "providerRequired": "Please select a git provider."
     }
   }
 }
