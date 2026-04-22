@@ -110,47 +110,49 @@ def _get_comment_api_url(body: Dict[str, Any]) -> str:
     return ""
 
 
-# Commands that we're willing to lift out of a quote-reply shape ahead of the
-# "must start with /" gate below. Kept narrow on purpose - we don't want a
-# user's quoted ``/review`` comment to accidentally re-trigger a review; but
-# ``/learn`` is low-risk (it just stores what it's given) and is the one
-# command people are most likely to reply-quote.
-_QUOTE_REPLY_SAFE_COMMANDS = ("/learn",)
-
-
 def _rewrite_quote_reply_with_command(comment_body: str) -> str | None:
-    """Reorder a quote-reply body so a recognised command is first.
+    """Reorder a quote-reply body so the learn command comes first.
 
-    Returns a rewritten ``/command <quoted text>`` string if the input looks
-    like ``> quoted line(s)\n/command [args]``, else ``None`` so the caller
-    can keep today's strict behaviour. We only move one of
-    ``_QUOTE_REPLY_SAFE_COMMANDS`` - any other slash command embedded in a
-    quote is left alone.
+    Returns a rewritten ``/<learn-cmd> <quoted text>`` string if the input
+    looks like ``> quoted line(s)\n/<learn-cmd> [args]``, else ``None`` so
+    the caller can keep today's strict "must start with /" behaviour.
+
+    Only the command configured under ``knowledge_base.learn_command``
+    (``/learn`` by default, and overridable via the dashboard / Dynaconf) is
+    lifted. Any other slash command embedded in a quote block is left alone
+    on purpose: a quoted ``/review`` must not accidentally re-trigger a
+    review, and the learn command is the only one that's safe to hoist
+    because it just stores whatever it's given.
     """
     if not comment_body or not isinstance(comment_body, str):
         return None
     stripped = comment_body.strip()
     if not stripped.startswith(">"):
         return None
-    for command in _QUOTE_REPLY_SAFE_COMMANDS:
-        # ``/command`` must appear on its own line (possibly with args) so we
-        # don't false-positive on literal occurrences inside the quote block.
-        pattern = re.compile(
-            rf"(?m)^(?P<cmd>{re.escape(command)}(?:\s+[^\n]*)?)\s*$"
-        )
-        match = pattern.search(stripped)
-        if not match:
-            continue
-        command_line = match.group("cmd").strip()
-        before = stripped[: match.start()].rstrip()
-        after = stripped[match.end():].lstrip()
-        # Keep everything the user wrote minus the command line itself, and
-        # hand it to the tool as the "rest" payload. The tool reads the
-        # original body via ``learn_context`` anyway, but rewriting here keeps
-        # the generic dispatcher (which re-splits on whitespace) happy.
-        quoted_body = "\n".join(part for part in (before, after) if part)
-        return f"{command_line}\n{quoted_body}" if quoted_body else command_line
-    return None
+    learn_command = (
+        get_settings().get("knowledge_base.learn_command", "/learn") or "/learn"
+    ).strip()
+    if not learn_command.startswith("/"):
+        # Be defensive about misconfigured values - a bare word would match
+        # arbitrary text in the quote block otherwise.
+        learn_command = f"/{learn_command.lstrip('/')}"
+    # ``/<cmd>`` must appear on its own line (possibly with args) so we
+    # don't false-positive on literal occurrences inside the quote block.
+    pattern = re.compile(
+        rf"(?m)^(?P<cmd>{re.escape(learn_command)}(?:\s+[^\n]*)?)\s*$"
+    )
+    match = pattern.search(stripped)
+    if not match:
+        return None
+    command_line = match.group("cmd").strip()
+    before = stripped[: match.start()].rstrip()
+    after = stripped[match.end():].lstrip()
+    # Keep everything the user wrote minus the command line itself, and hand
+    # it to the tool as the "rest" payload. The tool reads the original body
+    # via ``learn_context`` anyway, but rewriting here keeps the generic
+    # dispatcher (which re-splits on whitespace) happy.
+    quoted_body = "\n".join(part for part in (before, after) if part)
+    return f"{command_line}\n{quoted_body}" if quoted_body else command_line
 
 
 def _should_capture_learning(comment_body: str) -> bool:
