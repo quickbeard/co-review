@@ -14,7 +14,8 @@
     "llmServers": "Máy chủ LLM",
     "reviewContexts": "Ngữ cảnh đánh giá",
     "reviews": "Đánh giá",
-    "settings": "Cài đặt"
+    "settings": "Cài đặt",
+    "knowledgeBase": "Cơ sở tri thức"
   },
   "sidebar": {
     "expandSidebar": "Mở rộng thanh bên",
@@ -494,6 +495,87 @@
       "fetchDeliveriesFailed": "Không thể tải lịch sử giao.",
       "saveFailed": "Không thể lưu webhook.",
       "providerRequired": "Vui lòng chọn một nhà cung cấp git."
+    }
+  },
+  "settings": {
+    "title": "Cài đặt",
+    "description": "Quản lý hành vi của CoReview cho tự động hóa và thu thập tri thức.",
+    "backToSettings": "Quay lại Cài đặt",
+    "sections": {
+      "automation": {
+        "title": "Tự động hóa",
+        "description": "Cấu hình các lệnh chạy tự động trên PR và push, theo từng nhà cung cấp git."
+      },
+      "knowledgeBase": {
+        "title": "Cơ sở tri thức",
+        "description": "Điều khiển lệnh /learn, thu thập tự động theo quy tắc, truy xuất và tinh chỉnh."
+      }
+    }
+  },
+  "knowledgeBase": {
+    "title": "Cơ sở tri thức",
+    "description": "Lưu lại phản hồi của người review thành các bài học bền vững và đưa chúng vào review sau này.",
+    "master": {
+      "title": "Trạng thái",
+      "description": "Tắt cơ sở tri thức sẽ tạm dừng cả thu thập lẫn truy xuất. Dữ liệu đã có vẫn được giữ nguyên.",
+      "enabledLabel": "Bật cơ sở tri thức",
+      "enabledHelp": "Khi tắt, lệnh /learn sẽ bị từ chối và các bài học cũ không được đưa vào review."
+    },
+    "capture": {
+      "title": "Thu thập",
+      "description": "Chọn cách biến comment PR thành bài học: lệnh /learn rõ ràng hoặc khớp quy tắc tự động.",
+      "explicitLearnLabel": "Bật lệnh /learn",
+      "explicitLearnHelp": "Người review gõ /learn <nội dung> để lưu. Được khuyến nghị. Tắt để chuyển sang khớp quy tắc.",
+      "commandLabel": "Ký hiệu lệnh",
+      "commandHelp": "Ký hiệu người review gõ để lưu bài học. Mặc định là /learn."
+    },
+    "rules": {
+      "title": "Quy tắc trích xuất tự động",
+      "activeHelp": "Các quy tắc so khớp không phân biệt hoa thường trong mỗi comment. Khi trúng, toàn bộ comment được lưu làm bài học. Đang hoạt động vì lệnh /learn đã tắt.",
+      "disabledHelp": "Quy tắc chỉ chạy khi lệnh /learn bị tắt. Chúng tôi vẫn lưu danh sách này để sẵn sàng cho lần bật lại.",
+      "label": "Cụm từ quy tắc",
+      "description": "Mọi cụm từ dưới đây xuất hiện trong comment sẽ kích hoạt thu thập.",
+      "placeholder": "ví dụ: we prefer",
+      "emptyLabel": "Chưa có quy tắc nào.",
+      "addLabel": "Thêm quy tắc"
+    },
+    "retrieval": {
+      "title": "Truy xuất",
+      "description": "Điều khiển cách các bài học cũ xuất hiện trong review.",
+      "applyToReviewLabel": "Đưa bài học vào /review",
+      "applyToReviewHelp": "Khi bật, các bài học phù hợp được gộp vào ngữ cảnh PR-Agent dùng cho /review.",
+      "maxRetrievedLabel": "Số bài học tối đa mỗi review",
+      "maxRetrievedHelp": "Giới hạn số bài học PR-Agent có thể đính kèm cho mỗi review.",
+      "maxSummaryLabel": "Số ký tự tóm tắt tối đa",
+      "maxSummaryHelp": "Cắt mỗi đoạn tóm tắt bài học về số ký tự này."
+    },
+    "refinement": {
+      "title": "Tinh chỉnh",
+      "description": "Cài đặt cho worker nền giai đoạn 2. Worker lấy bài học thô và tinh chỉnh thành bản hoàn thiện.",
+      "duplicateThresholdLabel": "Ngưỡng trùng lặp",
+      "duplicateThresholdHelp": "Cosine similarity mà trên đó hai bài học bị xem là trùng (0-1). Cao hơn là khắt khe hơn."
+    },
+    "legacy": {
+      "title": "Thu thập thụ động (cũ)",
+      "deprecatedBadge": "Không còn dùng",
+      "description": "Cách thu thập cũ dựa vào @-mention. Giữ để tương thích ngược; sẽ được gỡ trong bản sau.",
+      "captureLabel": "Thu thập từ comment có @-mention",
+      "captureHelp": "Quét các comment tag bot để tìm cụm từ ưu tiên. Được thay thế bằng lệnh /learn và quy tắc ở trên.",
+      "requireMentionLabel": "Bắt buộc @-mention",
+      "requireMentionHelp": "Chỉ xét các comment có tag bot. Bị bỏ qua khi thu thập thụ động đang tắt."
+    },
+    "actions": {
+      "save": "Lưu thay đổi",
+      "reload": "Nạp lại từ DB"
+    },
+    "messages": {
+      "saved": "Đã lưu cấu hình cơ sở tri thức. Các tiến trình webhook sẽ lấy thay đổi ở lần deliver kế tiếp.",
+      "reloaded": "Đã làm mới cache. Lần deliver webhook tới sẽ đọc lại cấu hình từ database."
+    },
+    "errors": {
+      "loadFailed": "Không thể tải cấu hình cơ sở tri thức.",
+      "saveFailed": "Không thể lưu cấu hình cơ sở tri thức.",
+      "reloadFailed": "Không thể làm mới cache cấu hình."
     }
   }
 }
