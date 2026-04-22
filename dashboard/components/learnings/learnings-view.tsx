@@ -62,6 +62,7 @@ const STATUS_OPTIONS: LearningStatus[] = ["raw", "refined", "rejected"];
 const SOURCE_OPTIONS: LearningSourceType[] = [
   "explicit_learn",
   "passive_capture",
+  "automatic_extraction",
   "manual_import",
   "unknown",
 ];
@@ -331,7 +332,7 @@ export function LearningsView({ initial, initialError }: LearningsViewProps) {
                     <LearningText learning={item} dict={dict} />
                   </TableCell>
                   <TableCell className="align-top">
-                    <StatusBadge status={item.status} dict={dict} />
+                    <StatusBadge learning={item} dict={dict} />
                   </TableCell>
                   <TableCell className="align-top text-xs text-muted-foreground">
                     <div className="flex flex-col gap-1">
@@ -410,14 +411,25 @@ function LearningText({
 }
 
 function StatusBadge({
-  status,
+  learning,
   dict,
 }: {
-  status: LearningStatus;
+  learning: Learning;
   dict: ReturnType<typeof useDictionary>;
 }) {
+  const { status, rejectionReason, refineAttempts } = learning;
   const label = dict.learnings.status[status];
-  const tooltip = dict.learnings.status[`${status}_tooltip` as const];
+  const baseTooltip = dict.learnings.status[`${status}_tooltip` as const];
+  // For rejected records we surface the LLM-provided reason in the tooltip so
+  // reviewers can see *why* it was dropped without having to dig into the raw
+  // metadata payload. Transient failures reuse the same field but keep the
+  // record in "raw" status, so we expose the reason there as well to help
+  // debug quota / JSON-parse issues during rollout.
+  const tooltip =
+    (status === "rejected" || (status === "raw" && refineAttempts > 0)) &&
+    rejectionReason
+      ? `${baseTooltip}\n${dict.learnings.status.rejection_reason_label}: ${rejectionReason}`
+      : baseTooltip;
   const variant: "secondary" | "destructive" | "outline" =
     status === "refined"
       ? "secondary"
