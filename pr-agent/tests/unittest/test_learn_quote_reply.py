@@ -55,11 +55,48 @@ class TestRewriteQuoteReplyWithCommand:
         # No slash command = no rewrite.
         assert _rewrite_quote_reply_with_command("> just a quote") is None
 
-    def test_unknown_slash_command_not_rewritten(self):
-        # Only commands in the safe-list get reordered; arbitrary slash
-        # commands embedded in quotes keep today's strict behaviour.
+    def test_non_learn_slash_command_not_rewritten(self):
+        # Only the configured ``knowledge_base.learn_command`` gets
+        # reordered; other slash commands embedded in quotes keep today's
+        # strict behaviour so a quoted ``/review`` can't re-trigger a
+        # review.
         body = "> please rename\n\n/review"
         assert _rewrite_quote_reply_with_command(body) is None
+
+    def test_custom_learn_command_is_honoured(self):
+        # The learn command is configurable (dashboard / Dynaconf); the
+        # rewriter must follow whatever the user set.
+        from pr_agent.config_loader import get_settings
+
+        previous = get_settings().get("knowledge_base.learn_command", "/learn")
+        try:
+            get_settings().set("knowledge_base.learn_command", "/remember")
+            body = "> this is worth saving\n\n/remember"
+            out = _rewrite_quote_reply_with_command(body)
+            assert out is not None
+            assert out.splitlines()[0] == "/remember"
+            # The default command should no longer be lifted when a custom
+            # command is configured.
+            body_default = "> this is worth saving\n\n/learn"
+            assert _rewrite_quote_reply_with_command(body_default) is None
+        finally:
+            get_settings().set("knowledge_base.learn_command", previous)
+
+    def test_misconfigured_command_without_slash_is_coerced(self):
+        # Someone editing the config by hand may drop the leading ``/``.
+        # We auto-prefix it rather than silently matching arbitrary words
+        # inside the quote block.
+        from pr_agent.config_loader import get_settings
+
+        previous = get_settings().get("knowledge_base.learn_command", "/learn")
+        try:
+            get_settings().set("knowledge_base.learn_command", "remember")
+            body = "> this is worth saving\n\n/remember"
+            out = _rewrite_quote_reply_with_command(body)
+            assert out is not None
+            assert out.splitlines()[0] == "/remember"
+        finally:
+            get_settings().set("knowledge_base.learn_command", previous)
 
     def test_learn_substring_on_wrapped_line_ignored(self):
         # ``/learn`` must be on its own line - a quoted mention of
