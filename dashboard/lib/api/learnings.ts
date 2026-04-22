@@ -8,6 +8,7 @@ export type LearningStatus = "raw" | "refined" | "rejected";
 export type LearningSourceType =
   | "explicit_learn"
   | "passive_capture"
+  | "automatic_extraction"
   | "manual_import"
   | "unknown";
 
@@ -25,6 +26,10 @@ export interface Learning {
   rawComment: string | null;
   /** LLM-refined phrasing, once the background worker has run. */
   refinedText: string | null;
+  /** Reason the refinement worker rejected this entry, or the last transient error. */
+  rejectionReason: string | null;
+  /** How many times the refinement worker has tried to process this record. */
+  refineAttempts: number;
 }
 
 export interface LearningsResponse {
@@ -67,11 +72,22 @@ function deriveSourceType(meta: Record<string, unknown>): LearningSourceType {
   if (
     raw === "explicit_learn" ||
     raw === "passive_capture" ||
+    raw === "automatic_extraction" ||
     raw === "manual_import"
   ) {
     return raw;
   }
   return "unknown";
+}
+
+function readNumber(meta: Record<string, unknown>, key: string): number {
+  const value = meta[key];
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return 0;
 }
 
 function transformItem(item: LearningApiItem): Learning {
@@ -86,6 +102,8 @@ function transformItem(item: LearningApiItem): Learning {
     sourceType: deriveSourceType(metadata),
     rawComment: readString(metadata, "raw_comment"),
     refinedText: readString(metadata, "refined_text"),
+    rejectionReason: readString(metadata, "last_refine_error"),
+    refineAttempts: readNumber(metadata, "refine_attempts"),
   };
 }
 

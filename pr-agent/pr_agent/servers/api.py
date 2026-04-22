@@ -859,6 +859,205 @@ def reload_automation_config() -> dict[str, str]:
 
 
 # =============================================================================
+# Knowledge-base API (Stage 2)
+#
+# CRUD over the `knowledge_base_config` JSON column on the default
+# PRAgentConfig row. Runtime code (github_app, pr_learn, ...) still reads
+# KNOWLEDGE_BASE.* from Dynaconf; the postgres_provider overlays this JSON
+# on top of the TOML defaults so the Dashboard becomes the source of truth
+# without breaking CLI / GitHub-Action callers.
+# =============================================================================
+
+# Keys the Dashboard manages. Anything outside this allow-list that happens to
+# be in the JSON column (e.g. values written by a future admin tool) is kept
+# verbatim but neither surfaced nor overwritten. Infra-level keys
+# (`chroma_path`, `embedding_model`, `provider`, `scope`, ...) are intentionally
+# excluded - they belong in configuration.toml / deploy config.
+KNOWLEDGE_BASE_ALLOWED_KEYS: tuple[str, ...] = (
+    "enabled",
+    "explicit_learn_enabled",
+    "learn_command",
+    "extraction_rules",
+    "apply_to_review",
+    "max_retrieved_learnings",
+    "max_summary_chars",
+    "duplicate_threshold",
+    "capture_from_pr_comments",
+    "require_agent_mention",
+)
+
+# Defaults surfaced when the DB row is NULL or missing a key. Kept in sync
+# with `[knowledge_base]` in pr_agent/settings/configuration.toml.
+KNOWLEDGE_BASE_DEFAULTS: dict[str, Any] = {
+    "enabled": False,
+    "explicit_learn_enabled": True,
+    "learn_command": "/learn",
+    "extraction_rules": [],
+    "apply_to_review": True,
+    "max_retrieved_learnings": 5,
+    "max_summary_chars": 1200,
+    "duplicate_threshold": 0.9,
+    "capture_from_pr_comments": False,
+    "require_agent_mention": True,
+}
+
+# Template rules auto-seeded when an admin disables `explicit_learn_enabled`
+# with an empty rule list. Mirrors `learning_extractor.PREFERENCE_MARKERS` so
+# passive capture still produces useful hits even if the operator never
+# configures the rules manually.
+KNOWLEDGE_BASE_DEFAULT_RULES: tuple[str, ...] = (
+    "we prefer",
+    "in this project",
+    "in this repo",
+    "we always",
+    "we never",
+    "our standard",
+    "our convention",
+    "please avoid",
+    "do not suggest",
+    "should use",
+    "shouldn't use",
+)
+
+
+class KnowledgeBaseConfig(BaseModel):
+    """Full knowledge-base config surfaced to the Dashboard."""
+
+    enabled: bool = False
+    explicit_learn_enabled: bool = True
+    learn_command: str = "/learn"
+    extraction_rules: list[str] = []
+    apply_to_review: bool = True
+    max_retrieved_learnings: int = 5
+    max_summary_chars: int = 1200
+    duplicate_threshold: float = 0.9
+    capture_from_pr_comments: bool = False
+    require_agent_mention: bool = True
+
+
+class KnowledgeBaseConfigUpdate(BaseModel):
+    """Partial update for knowledge-base config. Missing keys leave values unchanged."""
+
+    enabled: bool | None = None
+    explicit_learn_enabled: bool | None = None
+    learn_command: str | None = None
+    extraction_rules: list[str] | None = None
+    apply_to_review: bool | None = None
+    max_retrieved_learnings: int | None = None
+    max_summary_chars: int | None = None
+    duplicate_threshold: float | None = None
+    capture_from_pr_comments: bool | None = None
+    require_agent_mention: bool | None = None
+
+
+def _build_knowledge_base_response(config: PRAgentConfig) -> KnowledgeBaseConfig:
+    """Compose the API response by merging stored JSON with defaults."""
+    merged: dict[str, Any] = dict(KNOWLEDGE_BASE_DEFAULTS)
+    stored = config.knowledge_base_config or {}
+    for key in KNOWLEDGE_BASE_ALLOWED_KEYS:
+        if key in stored:
+            merged[key] = stored[key]
+    # Normalise extraction_rules into a clean list[str] so callers never see
+    # stray types coming back from historical JSON.
+    raw_rules = merged.get("extraction_rules") or []
+    if isinstance(raw_rules, (list, tuple)):
+        merged["extraction_rules"] = [str(r) for r in raw_rules if isinstance(r, str)]
+    else:
+        merged["extraction_rules"] = []
+    return KnowledgeBaseConfig(**merged)
+
+
+def _merge_knowledge_base_update(
+    existing: dict[str, Any] | None,
+    update: KnowledgeBaseConfigUpdate,
+) -> dict[str, Any]:
+    """Produce the new JSON payload by overlaying the allow-listed fields.
+
+    Unknown keys in ``existing`` are preserved (forward-compat). Values written
+    by this function are normalised (lists coerced to ``list[str]``, strings
+    stripped) so the UI can't push misshapen data into the DB.
+    """
+    merged: dict[str, Any] = dict(existing or {})
+    update_dict = update.model_dump(exclude_none=True)
+
+    for key, value in update_dict.items():
+        if key not in KNOWLEDGE_BASE_ALLOWED_KEYS:
+            continue
+        if key == "extraction_rules":
+            if not isinstance(value, list):
+                continue
+            merged[key] = [str(v).strip() for v in value if isinstance(v, str) and v.strip()]
+        elif key == "learn_command":
+            merged[key] = str(value).strip() or "/learn"
+        else:
+            merged[key] = value
+
+    # Safety net: an operator who turns explicit_learn off without defining
+    # any rules would otherwise silently stop capturing anything. Prefill the
+    # template markers so the system keeps working; operators can always delete
+    # rules they don't want. Done *after* the regular merge so an explicit
+    # empty list on an already-disabled config stays empty unless the user
+    # just-now flipped the toggle - which we detect by checking the pre-update
+    # row through the caller's `existing` snapshot.
+    if merged.get("explicit_learn_enabled") is False and not merged.get("extraction_rules"):
+        previously_disabled = bool(existing) and existing.get("explicit_learn_enabled") is False
+        if not previously_disabled:
+            merged["extraction_rules"] = list(KNOWLEDGE_BASE_DEFAULT_RULES)
+
+    return merged
+
+
+@app.get("/api/knowledge-base", response_model=KnowledgeBaseConfig)
+def get_knowledge_base_config(session: SessionDep) -> KnowledgeBaseConfig:
+    """Return the current knowledge-base config, merged with TOML defaults."""
+    config = get_or_create_default_config(session)
+    return _build_knowledge_base_response(config)
+
+
+@app.put("/api/knowledge-base", response_model=KnowledgeBaseConfig)
+def update_knowledge_base_config(
+    update: KnowledgeBaseConfigUpdate,
+    session: SessionDep,
+) -> KnowledgeBaseConfig:
+    """Persist knowledge-base config changes and invalidate the webhook cache."""
+    config = get_or_create_default_config(session)
+
+    existing = dict(config.knowledge_base_config or {})
+    config.knowledge_base_config = _merge_knowledge_base_update(existing, update)
+    config.updated_at = datetime.now(timezone.utc)
+    session.add(config)
+    session.commit()
+    session.refresh(config)
+
+    # Best-effort cache bust - webhook picks up the change on the next delivery.
+    try:
+        from pr_agent.secret_providers.postgres_provider import (
+            invalidate_postgres_config_cache,
+        )
+
+        invalidate_postgres_config_cache()
+    except Exception:
+        pass
+
+    get_logger().info("Updated knowledge-base config")
+    return _build_knowledge_base_response(config)
+
+
+@app.post("/api/knowledge-base/reload")
+def reload_knowledge_base_config() -> dict[str, str]:
+    """Force the webhook service to re-read knowledge-base config on its next call."""
+    try:
+        from pr_agent.secret_providers.postgres_provider import (
+            invalidate_postgres_config_cache,
+        )
+
+        invalidate_postgres_config_cache()
+    except Exception as e:
+        raise HTTPException(status_code=500, detail="Failed to invalidate cache") from e
+    return {"status": "ok"}
+
+
+# =============================================================================
 # Webhook registry (P1)
 #
 # CRUD over `webhook_registrations` + provider-side actions
