@@ -52,6 +52,9 @@ services:
     volumes:
       - ./pr-agent/.pr_agent.toml:/app/.pr_agent.toml:ro
       - ./pr-agent/pr_agent/settings/.secrets.toml:/app/pr_agent/settings/.secrets.toml:ro
+      # Shared Mem0/Chroma store so the API, webhook handlers, and the
+      # refinement worker all read/write the same learning index.
+      - mem0_data:/app/.mem0
     depends_on:
       postgres:
         condition: service_healthy
@@ -77,9 +80,23 @@ services:
     environment:
       PORT: "3000"
       DATABASE_URL: ${DATABASE_URL}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL}
+      # Knowledge-base knobs must match pr-agent-api so the webhook handler
+      # embeds with the same model/gateway and writes into the same Chroma
+      # collection that the dashboard and worker read from.
+      KNOWLEDGE_BASE__ENABLED: "true"
+      KNOWLEDGE_BASE__PROVIDER: "mem0"
+      KNOWLEDGE_BASE__CHROMA_PATH: "/app/.mem0/chroma"
+      KNOWLEDGE_BASE__CAPTURE_FROM_PR_COMMENTS: "true"
+      KNOWLEDGE_BASE__APPLY_TO_REVIEW: "true"
+      KNOWLEDGE_BASE__REQUIRE_AGENT_MENTION: "true"
+      KNOWLEDGE_BASE__MAX_RETRIEVED_LEARNINGS: "5"
+      KNOWLEDGE_BASE__EMBEDDING_MODEL: "BAAI/bge-m3"
     volumes:
       - ./pr-agent/.pr_agent.toml:/app/.pr_agent.toml:ro
       - ./pr-agent/pr_agent/settings/.secrets.toml:/app/pr_agent/settings/.secrets.toml:ro
+      - mem0_data:/app/.mem0
     depends_on:
       postgres:
         condition: service_healthy
@@ -99,13 +116,54 @@ services:
     environment:
       PORT: "3000"
       DATABASE_URL: ${DATABASE_URL}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL}
+      KNOWLEDGE_BASE__ENABLED: "true"
+      KNOWLEDGE_BASE__PROVIDER: "mem0"
+      KNOWLEDGE_BASE__CHROMA_PATH: "/app/.mem0/chroma"
+      KNOWLEDGE_BASE__CAPTURE_FROM_PR_COMMENTS: "true"
+      KNOWLEDGE_BASE__APPLY_TO_REVIEW: "true"
+      KNOWLEDGE_BASE__REQUIRE_AGENT_MENTION: "true"
+      KNOWLEDGE_BASE__MAX_RETRIEVED_LEARNINGS: "5"
+      KNOWLEDGE_BASE__EMBEDDING_MODEL: "BAAI/bge-m3"
     volumes:
       - ./pr-agent/.pr_agent.toml:/app/.pr_agent.toml:ro
       - ./pr-agent/pr_agent/settings/.secrets.toml:/app/pr_agent/settings/.secrets.toml:ro
+      - mem0_data:/app/.mem0
     depends_on:
       postgres:
         condition: service_healthy
     entrypoint: ["python", "-m", "pr_agent.servers.gitlab_webhook"]
+
+  # Background worker that refines raw /learn captures via LLM.
+  # Shares the mem0_data volume so refinements land in the same Chroma store
+  # the API and webhook handlers read from.
+  pr-agent-worker:
+    build:
+      context: ./pr-agent
+      dockerfile: docker/Dockerfile
+    container_name: co-review-pr-agent-worker
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL}
+      # Kept in sync with pr-agent-api so the worker reaches the same Chroma
+      # location even if someone overrides KNOWLEDGE_BASE__CHROMA_PATH there.
+      KNOWLEDGE_BASE__ENABLED: "true"
+      KNOWLEDGE_BASE__PROVIDER: "mem0"
+      KNOWLEDGE_BASE__CHROMA_PATH: "/app/.mem0/chroma"
+      KNOWLEDGE_BASE__EMBEDDING_MODEL: "BAAI/bge-m3"
+    volumes:
+      - ./pr-agent/.pr_agent.toml:/app/.pr_agent.toml:ro
+      - ./pr-agent/pr_agent/settings/.secrets.toml:/app/pr_agent/settings/.secrets.toml:ro
+      - mem0_data:/app/.mem0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      pr-agent-api:
+        condition: service_healthy
+    entrypoint: ["python", "-m", "pr_agent.workers.refinement"]
 
   # =============================================================================
   # Dashboard
@@ -137,3 +195,7 @@ services:
 
 volumes:
   postgres_data:
+  # Named volume shared across every pr-agent service that reads or writes
+  # Mem0/Chroma data. Without this each container had its own isolated
+  # `.mem0/` directory and learnings never reached the webhook handlers.
+  mem0_data:
