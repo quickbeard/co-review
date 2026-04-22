@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from datetime import datetime, timezone
 from typing import Any
@@ -122,6 +123,35 @@ class Mem0MemoryProvider:
     def _repo_scope(repo_full_name: str) -> str:
         return f"repo:{repo_full_name.lower().strip()}"
 
+    @staticmethod
+    def _sanitize_metadata(meta: dict[str, Any]) -> dict[str, Any]:
+        """Coerce metadata values to types Chroma accepts (str/int/float/bool).
+
+        - ``None`` values are dropped entirely. The vector store treats "key
+          absent" and "key is null" equivalently for our read paths, and
+          Chroma rejects ``None`` outright.
+        - ``list``/``dict``/``tuple`` values are JSON-serialised so the
+          dashboard can round-trip them; they won't be searchable as
+          structured values but that's fine for the fields we currently use
+          (``matched_rule`` etc are scalars already).
+        - Everything else is left as-is.
+        """
+        clean: dict[str, Any] = {}
+        for key, value in meta.items():
+            if value is None:
+                continue
+            if isinstance(value, (str, int, float, bool)):
+                clean[key] = value
+                continue
+            if isinstance(value, (list, tuple, dict)):
+                try:
+                    clean[key] = json.dumps(value, ensure_ascii=False)
+                except (TypeError, ValueError):
+                    clean[key] = str(value)
+                continue
+            clean[key] = str(value)
+        return clean
+
     def store_learning(
         self,
         repo_full_name: str,
@@ -153,6 +183,13 @@ class Mem0MemoryProvider:
         meta["repo"] = repo_full_name
         meta.setdefault("status", "raw")
         meta["created_at"] = datetime.now(timezone.utc).isoformat()
+        # Chroma (and a couple of other Mem0 vector backends) only accept
+        # scalar metadata values. ``None``/``list``/``dict`` values slip
+        # through Mem0's ``infer=True`` path because it rebuilds metadata
+        # from LLM output, but with ``infer=False`` we hand our dict to the
+        # vector store verbatim - so we normalise here to avoid a cryptic
+        # ``Cannot convert Python object to MetadataValue`` from Chroma.
+        meta = self._sanitize_metadata(meta)
 
         scope = self._repo_scope(repo_full_name)
         try:
@@ -163,16 +200,21 @@ class Mem0MemoryProvider:
                 metadata=meta,
                 infer=False,
             )
-        except TypeError:
-            # Older mem0 releases didn't expose ``infer``. Fall back to the
-            # default behaviour and accept the upfront LLM pass on those
-            # versions rather than failing the whole store.
+        except TypeError as e:
+            # Older mem0 releases didn't expose ``infer``. Only retry when
+            # the TypeError was specifically about the kwarg - any other
+            # TypeError (e.g. Chroma's "Cannot convert Python object to
+            # MetadataValue") is a real bug we must surface, not hide by
+            # silently falling back to the LLM-gated path.
+            if "infer" not in str(e):
+                get_logger().warning(f"Failed to store learning in Mem0: {e}")
+                return None
             try:
                 response = self._client.add(
                     learning_text, user_id=scope, metadata=meta
                 )
-            except Exception as e:
-                get_logger().warning(f"Failed to store learning in Mem0: {e}")
+            except Exception as e2:
+                get_logger().warning(f"Failed to store learning in Mem0: {e2}")
                 return None
         except Exception as e:
             get_logger().warning(f"Failed to store learning in Mem0: {e}")

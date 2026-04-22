@@ -23,6 +23,7 @@ Design notes for stage 1:
 """
 from __future__ import annotations
 
+import re
 from functools import partial
 from typing import Any
 
@@ -57,11 +58,40 @@ class PRLearn:
 
     # ------------------------------------------------------------------ helpers
 
+    @staticmethod
+    def _unquote_lines(body: str) -> str:
+        """Strip GitHub markdown quote prefixes (``> ``) one level deep.
+
+        Non-quoted lines are dropped so that the ``/learn`` token itself or
+        any surrounding prose the user added doesn't bleed into the stored
+        learning. Returns the joined un-quoted text, already ``strip``'d.
+        """
+        cleaned: list[str] = []
+        for line in body.splitlines():
+            stripped_line = line.lstrip()
+            if not stripped_line.startswith(">"):
+                continue
+            cleaned.append(re.sub(r"^>\s?", "", stripped_line))
+        return "\n".join(segment for segment in cleaned if segment.strip()).strip()
+
+    @staticmethod
+    def _is_quote_only(body: str) -> bool:
+        """True when every non-empty line in ``body`` is a markdown quote."""
+        any_content = False
+        for line in body.splitlines():
+            if not line.strip():
+                continue
+            any_content = True
+            if not line.lstrip().startswith(">"):
+                return False
+        return any_content
+
     def _candidate_text(self) -> tuple[str, str]:
         """Return ``(candidate, source)`` - the raw text to learn from.
 
-        ``source`` is one of ``"inline"``, ``"parent_comment"``, ``"empty"``
-        and is stored in metadata so the dashboard can distinguish shapes.
+        ``source`` is one of ``"inline"``, ``"quote_reply"``,
+        ``"parent_comment"``, ``"empty"`` and is stored in metadata so the
+        dashboard can distinguish shapes.
         """
         raw_body = (self._learn_context.get("raw_comment_body") or "").strip()
         command_token = get_settings().get(
@@ -69,18 +99,36 @@ class PRLearn:
         )
 
         if raw_body:
-            stripped = raw_body
-            if stripped.lower().startswith(command_token.lower()):
-                stripped = stripped[len(command_token):].lstrip(" :,-").strip()
-            if stripped:
-                return stripped, "inline"
+            # 1. Inline: "/learn <some preference text>"
+            if raw_body.lower().startswith(command_token.lower()):
+                stripped = raw_body[len(command_token):].lstrip(" :,-").strip()
+                # If the tail is *purely* a quoted block (e.g. because the
+                # webhook dispatcher rewrote "> quoted\n/learn" into
+                # "/learn\n> quoted"), treat the quote as the learning.
+                if stripped and self._is_quote_only(stripped):
+                    unquoted = self._unquote_lines(stripped)
+                    if unquoted:
+                        return unquoted, "quote_reply"
+                if stripped:
+                    return stripped, "inline"
 
-        # Fallback for shell-parsed args (posix shlex preserves words only).
+            # 2. Quote-reply: a bare ``/learn`` line anywhere in the body
+            # with a sibling markdown quote. Belt-and-braces in case the
+            # dispatcher's rewriter ever stops short.
+            bare_cmd = re.compile(
+                rf"(?mi)^\s*{re.escape(command_token)}\s*$"
+            )
+            if bare_cmd.search(raw_body):
+                unquoted = self._unquote_lines(raw_body)
+                if unquoted:
+                    return unquoted, "quote_reply"
+
+        # 3. Shell-parsed args (posix shlex preserves words only).
         joined = " ".join(self.args).strip()
         if joined:
             return joined, "inline"
 
-        # No inline text => try the parent comment in a review thread.
+        # 4. No inline text => try the parent comment in a review thread.
         parent_id = self._learn_context.get("parent_comment_id")
         if parent_id and hasattr(self.git_provider, "get_review_thread_comments"):
             try:
