@@ -130,30 +130,64 @@ class Mem0MemoryProvider:
     ) -> str | None:
         """Persist a learning and return the mem0 memory id on success.
 
-        Return value shape changed from ``bool`` to ``str | None`` so the
-        caller (e.g. the ``/learn`` tool) can reference the stored record in
-        the acknowledgement message and so a future refinement worker can
-        look it up. A non-empty string denotes success; ``None`` means the
-        store failed. Callers doing a truthy check keep working unchanged.
+        Return value:
+            * mem0 memory id (``str``) when the record was stored.
+            * ``None`` when the store failed (raised or Mem0 dropped the
+              input). A previous revision returned ``""`` in the "Mem0
+              accepted but emitted no id" case, which callers then treated
+              as failure anyway - we normalise to ``None`` so the dashboard
+              / ``/learn`` ack path can distinguish "stored" from "not
+              stored" cleanly.
+
+        We pass ``infer=False`` so Mem0 stores the text verbatim instead of
+        running its internal fact-extraction LLM. That matches stage 1's
+        design ("capture raw, refine later") and prevents Mem0 from silently
+        dropping low-signal inputs like ``/learn trash comment lol`` - the
+        Stage-2 worker is the only component allowed to touch the LLM for
+        learning content.
         """
         if not self._client or not learning_text:
             return None
 
         meta = dict(metadata or {})
         meta["repo"] = repo_full_name
-        meta.setdefault("status", "refined")
+        meta.setdefault("status", "raw")
         meta["created_at"] = datetime.now(timezone.utc).isoformat()
 
         scope = self._repo_scope(repo_full_name)
         try:
             # mem0 uses user_id as a scope key; we map it to repository scope.
-            response = self._client.add(learning_text, user_id=scope, metadata=meta)
+            response = self._client.add(
+                learning_text,
+                user_id=scope,
+                metadata=meta,
+                infer=False,
+            )
+        except TypeError:
+            # Older mem0 releases didn't expose ``infer``. Fall back to the
+            # default behaviour and accept the upfront LLM pass on those
+            # versions rather than failing the whole store.
+            try:
+                response = self._client.add(
+                    learning_text, user_id=scope, metadata=meta
+                )
+            except Exception as e:
+                get_logger().warning(f"Failed to store learning in Mem0: {e}")
+                return None
         except Exception as e:
             get_logger().warning(f"Failed to store learning in Mem0: {e}")
             return None
 
         memory_id = self._extract_memory_id(response)
-        return memory_id or ""  # empty string is still truthy-enough sentinel
+        if not memory_id:
+            # Mem0 succeeded without surfacing an id. Shouldn't happen with
+            # ``infer=False`` but stays visible if it ever does.
+            get_logger().warning(
+                "Mem0 add() returned no memory id for learning; "
+                f"response_shape={type(response).__name__}"
+            )
+            return None
+        return memory_id
 
     @staticmethod
     def _extract_memory_id(response: Any) -> str | None:
@@ -185,13 +219,18 @@ class Mem0MemoryProvider:
 
     @staticmethod
     def _normalize_item(item: dict[str, Any]) -> LearningRecord:
+        metadata = item.get("metadata", {}) or {}
+        # mem0's high-level API surfaces memory text on the top-level `memory`
+        # key. When we drop to the Chroma vector_store directly (the only way
+        # to list memories unscoped in modern mem0) the text lives in
+        # metadata["data"] instead, so fall through to that.
         text = (
             item.get("memory")
             or item.get("text")
             or item.get("content")
+            or metadata.get("data")
             or ""
         )
-        metadata = item.get("metadata", {}) or {}
         created_at = None
         # Prefer mem0's top-level created_at, fall back to metadata
         created_raw = item.get("created_at") or metadata.get("created_at")
@@ -204,7 +243,7 @@ class Mem0MemoryProvider:
         repo = metadata.get("repo")
         if not repo:
             # derive from user_id scope (e.g. "repo:org/name")
-            user_id = item.get("user_id", "")
+            user_id = item.get("user_id") or metadata.get("user_id") or ""
             if isinstance(user_id, str) and user_id.startswith("repo:"):
                 repo = user_id[len("repo:"):]
 
@@ -243,40 +282,142 @@ class Mem0MemoryProvider:
         repo_full_name: str | None = None,
         limit: int = 100,
     ) -> list[LearningRecord]:
+        """List stored learnings, optionally filtered by repo.
+
+        Modern mem0 (>=0.1.x) changed ``Memory.get_all`` to require entity
+        filters (``filters={"user_id": ...}``) and rejects the old ``user_id=``
+        kwarg, so we support both shapes. When no repo is provided we fall
+        back to the underlying Chroma ``vector_store.list`` - the only way
+        to get an unscoped dump in the new API.
+        """
         if not self._client:
             return []
 
-        try:
-            if repo_full_name:
-                results = self._client.get_all(
-                    user_id=self._repo_scope(repo_full_name), limit=limit
-                )
-            else:
-                results = self._client.get_all(limit=limit)
-        except TypeError:
-            # Older mem0 signatures may not support the `limit` kwarg.
-            try:
-                if repo_full_name:
-                    results = self._client.get_all(user_id=self._repo_scope(repo_full_name))
-                else:
-                    results = self._client.get_all()
-            except Exception as e:
-                get_logger().warning(f"Failed to list Mem0 learnings: {e}")
-                return []
-        except Exception as e:
-            get_logger().warning(f"Failed to list Mem0 learnings: {e}")
-            return []
+        raw_items: list[dict[str, Any]] = []
 
-        if isinstance(results, dict):
-            results = results.get("results") or []
+        if repo_full_name:
+            scope = self._repo_scope(repo_full_name)
+            raw_items = self._get_all_scoped(scope, limit)
+        else:
+            raw_items = self._list_unscoped(limit)
 
-        normalized = [self._normalize_item(item) for item in (results or [])]
+        normalized = [self._normalize_item(item) for item in raw_items]
         # Sort newest first when timestamps are available.
         normalized.sort(
             key=lambda r: r.created_at or datetime.min.replace(tzinfo=timezone.utc),
             reverse=True,
         )
         return normalized[:limit]
+
+    def _get_all_scoped(self, scope: str, limit: int) -> list[dict[str, Any]]:
+        """Fetch records for a single user_id scope via Mem0's public API.
+
+        Tries the modern ``filters=/top_k=`` signature first, then falls back
+        to the pre-1.0 ``user_id=/limit=`` kwargs for older installs. Raw
+        Chroma fallback covers the rare case where both signatures raise
+        (e.g. an unsupported ``Memory.get_all`` stub).
+        """
+        client = self._client
+        assert client is not None
+
+        try:
+            results = client.get_all(filters={"user_id": scope}, top_k=limit)
+        except TypeError:
+            try:
+                results = client.get_all(user_id=scope, limit=limit)
+            except TypeError:
+                try:
+                    results = client.get_all(user_id=scope)
+                except Exception as e:
+                    get_logger().warning(f"Failed to list Mem0 learnings (scoped): {e}")
+                    return self._list_via_vector_store({"user_id": scope}, limit)
+            except Exception as e:
+                get_logger().warning(f"Failed to list Mem0 learnings (scoped): {e}")
+                return self._list_via_vector_store({"user_id": scope}, limit)
+        except Exception as e:
+            get_logger().warning(f"Failed to list Mem0 learnings (scoped): {e}")
+            return self._list_via_vector_store({"user_id": scope}, limit)
+
+        if isinstance(results, dict):
+            results = results.get("results") or []
+        return list(results or [])
+
+    def _list_unscoped(self, limit: int) -> list[dict[str, Any]]:
+        """Dump every memory in the store, regardless of user_id scope.
+
+        Modern mem0 refuses ``get_all`` without an entity filter, so we reach
+        past it into the vector store. We still try the public API first for
+        older installs that tolerate the unscoped call.
+        """
+        client = self._client
+        assert client is not None
+
+        try:
+            results = client.get_all(top_k=limit)
+            if isinstance(results, dict):
+                results = results.get("results") or []
+            if results:
+                return list(results)
+        except (TypeError, ValueError):
+            pass  # modern mem0 path - drop to vector store below
+        except Exception as e:
+            get_logger().debug(
+                f"mem0.get_all() unscoped call failed, falling back to vector_store: {e}"
+            )
+
+        return self._list_via_vector_store(None, limit)
+
+    def _list_via_vector_store(
+        self,
+        filters: dict[str, Any] | None,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        """Read directly from the Chroma vector store backing Mem0.
+
+        Mem0 stores the memory text inside ``metadata["data"]`` rather than
+        Chroma's ``documents`` field, so the shape we return here mimics the
+        high-level API's output closely enough for ``_normalize_item`` to
+        consume it unchanged.
+        """
+        client = self._client
+        assert client is not None
+
+        vector_store = getattr(client, "vector_store", None)
+        if vector_store is None:
+            get_logger().warning(
+                "mem0 Memory client has no vector_store attribute; cannot list learnings."
+            )
+            return []
+
+        try:
+            raw = vector_store.list(filters=filters, top_k=limit)
+        except Exception as e:
+            get_logger().warning(f"Failed to list Mem0 learnings via vector store: {e}")
+            return []
+
+        # ChromaDB.list wraps its result in a single-element list.
+        if isinstance(raw, list) and raw and isinstance(raw[0], list):
+            raw = raw[0]
+
+        items: list[dict[str, Any]] = []
+        for entry in raw or []:
+            payload = getattr(entry, "payload", None)
+            if payload is None and isinstance(entry, dict):
+                payload = entry.get("payload")
+            payload = payload or {}
+            entry_id = getattr(entry, "id", None)
+            if entry_id is None and isinstance(entry, dict):
+                entry_id = entry.get("id")
+            items.append(
+                {
+                    "id": entry_id,
+                    "memory": payload.get("data"),
+                    "metadata": payload,
+                    "user_id": payload.get("user_id"),
+                    "created_at": payload.get("created_at"),
+                }
+            )
+        return items
 
     def delete_learning(self, learning_id: str) -> bool:
         if not self._client or not learning_id:
