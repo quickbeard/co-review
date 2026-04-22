@@ -13,7 +13,10 @@ from starlette_context import context
 from starlette_context.middleware import RawContextMiddleware
 
 from pr_agent.agent.pr_agent import PRAgent
-from pr_agent.algo.learning_extractor import extract_learning_candidate
+from pr_agent.algo.learning_extractor import (
+    extract_learning_candidate,
+    extract_learning_from_rules,
+)
 from pr_agent.algo.utils import update_settings_from_args
 from pr_agent.config_loader import get_settings, global_settings
 from pr_agent.git_providers import (get_git_provider,
@@ -179,13 +182,13 @@ async def _capture_repo_learning(
     comment_data = body.get("comment", {})
     metadata = {
         # Unified schema with the /learn tool so the dashboard can render
-        # both sources identically. Passive captures already passed the
-        # preference marker gate, so we flag them as already refined.
+        # both sources identically. All captures enter as ``raw`` and the
+        # stage 2 refinement worker polishes the wording uniformly.
         "source_type": "passive_capture",
         "trigger": "agent_mention",
-        "status": "refined",
+        "status": "raw",
         "raw_comment": comment_body,
-        "refined_text": learning_text,
+        "refined_text": None,
         "refine_attempts": 0,
         "last_refine_error": None,
         "comment_shape": "review_comment" if "pull_request_url" in comment_data else "issue_comment",
@@ -215,6 +218,106 @@ async def _capture_repo_learning(
             get_logger().warning("Failed to publish learnings acknowledgment comment")
 
 
+async def _capture_repo_learning_from_rules(
+    body: Dict[str, Any],
+    api_url: str,
+    comment_body: str,
+) -> bool:
+    """Rule-based automatic capture (active when ``explicit_learn_enabled = false``).
+
+    Returns ``True`` when a learning was stored, else ``False``. Keeping the
+    return value lets the caller short-circuit other capture paths when a
+    rule match has already consumed the comment.
+    """
+    settings = get_settings()
+    if not settings.get("knowledge_base.enabled", False):
+        return False
+    # Automatic extraction is the alternative to /learn - it only runs when
+    # the explicit command has been turned off by an administrator.
+    if settings.get("knowledge_base.explicit_learn_enabled", True):
+        return False
+    if not comment_body or not isinstance(comment_body, str):
+        return False
+    if comment_body.lstrip().startswith("/"):
+        return False
+
+    rules_raw = settings.get("knowledge_base.extraction_rules", []) or []
+    # Dynaconf may expose lists as plain list, tuple, or DynaBox-wrapped.
+    # Normalise to a plain ``list[str]`` so the extractor is predictable.
+    rules: list[str] = [str(r) for r in rules_raw if isinstance(r, (str, bytes))]
+    if not rules:
+        get_logger().warning(
+            "knowledge_base.explicit_learn_enabled is false but "
+            "knowledge_base.extraction_rules is empty - no learnings will be "
+            "captured. Configure a ruleset via the Dashboard to enable "
+            "automatic extraction."
+        )
+        return False
+
+    match = extract_learning_from_rules(comment_body, rules)
+    if not match:
+        return False
+    learning_text, matched_rule = match
+
+    app_name = settings.get("github.app_name", "pr-agent")
+    sender_login = (body.get("sender", {}) or {}).get("login", "")
+    if sender_login.lower() == app_name.lower():
+        return False
+
+    provider = get_git_provider_with_context(pr_url=api_url)
+    repo_full_name = (
+        getattr(provider, "repo", "")
+        or body.get("repository", {}).get("full_name", "")
+    )
+    if not repo_full_name:
+        return False
+
+    memory_provider = get_memory_provider()
+    if not memory_provider.is_enabled():
+        return False
+
+    comment_data = body.get("comment", {}) or {}
+    metadata: dict[str, Any] = {
+        "source_type": "automatic_extraction",
+        "trigger": "rule_match",
+        "matched_rule": matched_rule,
+        "status": "raw",
+        "raw_comment": comment_body,
+        "refined_text": None,
+        "refine_attempts": 0,
+        "last_refine_error": None,
+        "comment_shape": "review_comment" if "pull_request_url" in comment_data else "issue_comment",
+        "pr_number": body.get("issue", {}).get("number")
+        or body.get("pull_request", {}).get("number"),
+        "comment_id": comment_data.get("id"),
+        "parent_comment_id": comment_data.get("in_reply_to_id"),
+        "created_by": sender_login or None,
+        "repo": repo_full_name,
+    }
+    if "path" in comment_data:
+        metadata["file_path"] = comment_data.get("path")
+
+    stored = memory_provider.store_learning(
+        repo_full_name, learning_text, metadata=metadata
+    )
+    if not stored:
+        return False
+    try:
+        # TODO: Should we publish the comment to the PR? We can add a small silent mode
+        # to let our Coreview agent to capture the learning silently
+        provider.publish_comment(
+            "Learning captured automatically (matched rule: "
+            f"`{matched_rule}`):\n> {learning_text}\n\n"
+            "It will be refined by a background job before being applied to "
+            "future reviews."
+        )
+    except Exception:
+        get_logger().warning(
+            "Failed to publish automatic-extraction acknowledgment comment"
+        )
+    return True
+
+
 async def handle_comments_on_pr(body: Dict[str, Any],
                                 event: str,
                                 sender: str,
@@ -235,7 +338,15 @@ async def handle_comments_on_pr(body: Dict[str, Any],
             comment_body = '/ask' + comment_body_split[1] +' \n' +comment_body_split[0].strip().lstrip('>')
             get_logger().info(f"Reformatting comment_body so command is at the beginning: {comment_body}")
         else:
-            await _capture_repo_learning(body, api_url, comment_body)
+            # Rule-based automatic extraction runs when the admin disabled
+            # `/learn`. When a rule matches, skip the legacy passive path so a
+            # single comment cannot be captured twice during the deprecation
+            # window.
+            captured_by_rules = await _capture_repo_learning_from_rules(
+                body, api_url, comment_body
+            )
+            if not captured_by_rules:
+                await _capture_repo_learning(body, api_url, comment_body)
             get_logger().info("Ignoring comment not starting with /")
             return {}
 

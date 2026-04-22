@@ -315,6 +315,7 @@
     "sourceType": {
       "explicit_learn": "Lệnh /learn",
       "passive_capture": "@-nhắc (cũ)",
+      "automatic_extraction": "Khớp quy tắc",
       "manual_import": "Nhập thủ công",
       "unknown": "Không rõ"
     },
@@ -324,7 +325,8 @@
       "rejected": "Bị từ chối",
       "raw_tooltip": "Đã lưu nguyên văn. Tác vụ nền sẽ tinh chỉnh trước khi áp dụng vào review.",
       "refined_tooltip": "Sẵn sàng áp dụng cho các review tiếp theo.",
-      "rejected_tooltip": "Đã bị từ chối trong quá trình tinh chỉnh. Hãy xem lại hoặc xóa."
+      "rejected_tooltip": "Đã bị từ chối trong quá trình tinh chỉnh. Hãy xem lại hoặc xóa.",
+      "rejection_reason_label": "Lý do"
     },
     "actions": {
       "delete": "Xóa",

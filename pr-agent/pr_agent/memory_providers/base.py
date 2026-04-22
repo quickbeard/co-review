@@ -48,3 +48,34 @@ class MemoryProvider(Protocol):
 
     def list_repos(self) -> list[str]:
         ...
+
+    def list_pending_refinements(
+        self,
+        limit: int = 50,
+        max_attempts: int | None = None,
+    ) -> list[LearningRecord]:
+        """Return raw learnings awaiting background refinement.
+
+        Implementations should filter by ``metadata.status == "raw"`` and
+        exclude entries whose ``metadata.refine_attempts`` meets or exceeds
+        ``max_attempts`` (when provided), so poison records cannot stall
+        the queue.
+        """
+        ...
+
+    def update_learning_after_refinement(
+        self,
+        learning_id: str,
+        *,
+        refined_text: str | None,
+        status: str,
+        error: str | None = None,
+    ) -> bool:
+        """Finalise or retry a refinement.
+
+        Implementations MUST increment ``metadata.refine_attempts`` on every
+        call. On ``status="refined"`` with ``refined_text``, the stored text
+        is overwritten and ``last_refine_error`` cleared. On other statuses
+        the stored text is left alone and ``error`` is recorded.
+        """
+        ...

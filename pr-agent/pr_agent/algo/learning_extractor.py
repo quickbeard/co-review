@@ -59,6 +59,43 @@ def extract_learning_candidate(comment_body: str, app_name: str) -> str | None:
     return text
 
 
+def extract_learning_from_rules(
+    comment_body: str,
+    rules: list[str] | tuple[str, ...],
+) -> tuple[str, str] | None:
+    """Automatic extractor used when ``explicit_learn_enabled = false``.
+
+    Returns ``(matched_text, matched_rule)`` when any rule appears in the
+    comment body as a case-insensitive substring, or ``None`` when nothing
+    matches (including the common case of an empty ``rules`` list). Slash
+    commands are skipped so a reviewer typing ``/review`` is never mistaken
+    for a learning.
+
+    The returned text is the full stripped comment body, not just the span
+    around the match. That way the refinement worker gets enough context to
+    produce a coherent normative sentence.
+    """
+    if not comment_body or not isinstance(comment_body, str):
+        return None
+    if not rules:
+        return None
+
+    text = comment_body.strip()
+    if not text or text.startswith("/"):
+        return None
+
+    lowered_text = text.lower()
+    for rule in rules:
+        if not rule or not isinstance(rule, str):
+            continue
+        rule_stripped = rule.strip()
+        if not rule_stripped:
+            continue
+        if rule_stripped.lower() in lowered_text:
+            return text, rule_stripped
+    return None
+
+
 def extract_explicit_learning(
     comment_body: str,
     command_token: str = "/learn",

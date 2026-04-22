@@ -14,7 +14,8 @@
     "llmServers": "LLM Servers",
     "reviewContexts": "Review Contexts",
     "reviews": "Reviews",
-    "settings": "Settings"
+    "settings": "Settings",
+    "knowledgeBase": "Knowledge Base"
   },
   "sidebar": {
     "expandSidebar": "Expand sidebar",
@@ -314,6 +315,7 @@
     "sourceType": {
       "explicit_learn": "/learn command",
       "passive_capture": "@-mention (legacy)",
+      "automatic_extraction": "Rule match",
       "manual_import": "Manual import",
       "unknown": "Unknown"
     },
@@ -323,7 +325,8 @@
       "rejected": "Rejected",
       "raw_tooltip": "Stored verbatim. The background worker will refine the wording before it is shown in reviews.",
       "refined_tooltip": "Ready to be applied in future reviews.",
-      "rejected_tooltip": "Rejected during refinement. Review or delete this entry."
+      "rejected_tooltip": "Rejected during refinement. Review or delete this entry.",
+      "rejection_reason_label": "Reason"
     },
     "actions": {
       "delete": "Delete",
@@ -494,6 +497,87 @@
       "fetchDeliveriesFailed": "Failed to load deliveries.",
       "saveFailed": "Failed to save webhook.",
       "providerRequired": "Please select a git provider."
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "description": "Manage CoReview behavior across automation and knowledge capture.",
+    "backToSettings": "Back to Settings",
+    "sections": {
+      "automation": {
+        "title": "Automation",
+        "description": "Configure which commands run automatically on PRs and pushes, per git provider."
+      },
+      "knowledgeBase": {
+        "title": "Knowledge Base",
+        "description": "Control the /learn command, automatic rule-based capture, retrieval, and refinement."
+      }
+    }
+  },
+  "knowledgeBase": {
+    "title": "Knowledge Base",
+    "description": "Capture reviewer feedback as durable learnings and surface them during reviews.",
+    "master": {
+      "title": "Status",
+      "description": "Turn the knowledge base off to pause both capture and retrieval. Existing data is preserved.",
+      "enabledLabel": "Enable knowledge base",
+      "enabledHelp": "When disabled, /learn is rejected and past learnings are not injected into reviews."
+    },
+    "capture": {
+      "title": "Capture",
+      "description": "Pick how PR comments become learnings: the explicit /learn command or automatic rule matching.",
+      "explicitLearnLabel": "Enable the /learn command",
+      "explicitLearnHelp": "Reviewers capture learnings by typing /learn <text>. Recommended. Disable to fall back to rule-based extraction.",
+      "commandLabel": "Command trigger",
+      "commandHelp": "The token reviewers type to capture a learning. Default is /learn."
+    },
+    "rules": {
+      "title": "Automatic extraction rules",
+      "activeHelp": "Rules match each PR comment case-insensitively. A hit captures the entire comment as a learning. Active because the /learn command is disabled.",
+      "disabledHelp": "Rules only run when the /learn command is disabled. We keep your list here so the feature is ready if you ever toggle off.",
+      "label": "Rule phrases",
+      "description": "Any phrase below that appears in a comment triggers capture.",
+      "placeholder": "e.g. we prefer",
+      "emptyLabel": "No rules configured.",
+      "addLabel": "Add rule"
+    },
+    "retrieval": {
+      "title": "Retrieval",
+      "description": "Control how past learnings are surfaced during reviews.",
+      "applyToReviewLabel": "Inject learnings into /review",
+      "applyToReviewHelp": "When on, matching learnings are added to the context PR-Agent uses for /review.",
+      "maxRetrievedLabel": "Max learnings per review",
+      "maxRetrievedHelp": "Upper bound on how many learnings PR-Agent can attach to a single review.",
+      "maxSummaryLabel": "Max summary characters",
+      "maxSummaryHelp": "Truncate each learning's injected summary to this many characters."
+    },
+    "refinement": {
+      "title": "Refinement",
+      "description": "Stage 2 background worker settings. The worker picks up raw learnings and turns them into polished entries.",
+      "duplicateThresholdLabel": "Duplicate threshold",
+      "duplicateThresholdHelp": "Cosine similarity above which two learnings are considered duplicates (0-1). Higher is stricter."
+    },
+    "legacy": {
+      "title": "Legacy passive capture",
+      "deprecatedBadge": "Deprecated",
+      "description": "Older @-mention based capture. Kept for backward compatibility; will be removed in a future release.",
+      "captureLabel": "Capture from @-mentions",
+      "captureHelp": "Scan PR comments that mention the bot for preference markers. Superseded by the /learn command and extraction rules above.",
+      "requireMentionLabel": "Require @-mention to capture",
+      "requireMentionHelp": "Only considers comments that explicitly tag the bot. Ignored when the legacy capture is off."
+    },
+    "actions": {
+      "save": "Save changes",
+      "reload": "Reload from DB"
+    },
+    "messages": {
+      "saved": "Knowledge base config saved. Webhook processes will pick up changes on the next delivery.",
+      "reloaded": "Cache invalidated. Next webhook delivery will re-read the config from the database."
+    },
+    "errors": {
+      "loadFailed": "Failed to load knowledge base config.",
+      "saveFailed": "Failed to save knowledge base config.",
+      "reloadFailed": "Failed to invalidate the config cache."
     }
   }
 }

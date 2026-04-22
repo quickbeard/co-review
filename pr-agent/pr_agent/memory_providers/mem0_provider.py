@@ -37,9 +37,33 @@ class Mem0MemoryProvider:
         collection_name = kb_cfg.get("collection_name", "pr_agent_repo_learnings")
 
         api_key = os.environ.get("OPENAI_API_KEY", get_settings().get("openai.key", ""))
-        # embedding_model = kb_cfg.get("embedding_model", "text-embedding-3-small")
-        embedding_model = "BAAI/bge-m3"
+        embedding_model = kb_cfg.get("embedding_model", "text-embedding-3-small")
         embedding_dimensions = kb_cfg.get("embedding_dimensions")
+
+        # Route Mem0's OpenAI LLM + embedder through whatever OpenAI-compatible
+        # gateway pr-agent itself is using. Without this Mem0 falls back to
+        # https://api.openai.com and immediately 401s on custom gateway keys
+        # (e.g. VTN Watson). Precedence mirrors how pr-agent resolves the URL
+        # elsewhere: explicit knowledge_base override > [openai].api_base in
+        # secrets > OPENAI_BASE_URL / OPENAI_API_BASE env vars.
+        openai_base_url = (
+            kb_cfg.get("embedding_base_url")
+            or get_settings().get("openai.api_base")
+            or os.environ.get("OPENAI_BASE_URL")
+            or os.environ.get("OPENAI_API_BASE")
+            or None
+        )
+
+        # Mem0 drives its own LLM for fact-extraction and memory-merging. That
+        # call hits the gateway over the raw OpenAI SDK, so the main pr-agent
+        # model (config.model) is often the wrong pick - e.g. VTN Watson's
+        # allowlist includes "openai/gpt-oss-120b:netmind" but not the
+        # unprefixed "MiniMax" you might review with. Keep them decoupled.
+        llm_model = (
+            kb_cfg.get("llm_model")
+            or get_settings().get("config.model", "")
+            or "gpt-4o-mini"
+        )
 
         config: dict[str, Any] = {
             "vector_store": {
@@ -52,36 +76,39 @@ class Mem0MemoryProvider:
         }
 
         if api_key:
-            config["llm"] = {
-                "provider": "openai",
-                "config": {
-                    "api_key": api_key,
-                    "model": get_settings().get("config.model", ""),
-                },
+            llm_cfg: dict[str, Any] = {
+                "api_key": api_key,
+                "model": llm_model,
             }
-            config["embedder"] = {
-                "provider": "openai",
-                "config": {
-                    "api_key": api_key,
-                    "model": embedding_model,
-                },
+            embedder_cfg: dict[str, Any] = {
+                "api_key": api_key,
+                "model": embedding_model,
             }
+            if openai_base_url:
+                llm_cfg["openai_base_url"] = openai_base_url
+                embedder_cfg["openai_base_url"] = openai_base_url
+
             if embedding_dimensions not in (None, "", 0, "0"):
                 try:
                     dimensions_value = int(embedding_dimensions)
                     if dimensions_value > 0:
-                        config["embedder"]["config"]["embedding_dims"] = dimensions_value
+                        embedder_cfg["embedding_dims"] = dimensions_value
                 except (TypeError, ValueError):
                     get_logger().warning(
                         "Ignoring invalid knowledge_base.embedding_dimensions value: "
                         f"{embedding_dimensions!r}. Expected a positive integer."
                     )
 
+            config["llm"] = {"provider": "openai", "config": llm_cfg}
+            config["embedder"] = {"provider": "openai", "config": embedder_cfg}
+
         try:
-            config["embedder"]["config"]["embedding_dims"] = None
             self._client = Memory.from_config(config)
+            gateway_hint = openai_base_url or "api.openai.com (default)"
             get_logger().info(
-                f"Initialized Mem0 learnings provider with Chroma collection '{collection_name}'"
+                "Initialized Mem0 learnings provider "
+                f"(collection='{collection_name}', embedder='{embedding_model}', "
+                f"llm='{llm_model}', gateway='{gateway_hint}')"
             )
         except Exception as e:
             self._disabled_reason = "mem0_init_failed"

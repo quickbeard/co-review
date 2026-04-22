@@ -1,6 +1,8 @@
 export const dynamic = "force-dynamic";
 
+import Link from "next/link";
 import { notFound } from "next/navigation";
+import { ChevronLeft } from "lucide-react";
 import { hasLocale } from "@/lib/i18n/config";
 import { getDictionary } from "@/app/dictionaries";
 import { getAutomationConfig } from "@/lib/api/automation";
@@ -23,7 +25,14 @@ export default async function AutomationPage({
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">
+        <Link
+          href={`/${lang}/settings`}
+          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        >
+          <ChevronLeft className="size-4" />
+          {dict.settings.backToSettings}
+        </Link>
+        <h1 className="mt-2 text-2xl font-bold text-foreground">
           {dict.automation.title}
         </h1>
         <p className="mt-1 text-muted-foreground">

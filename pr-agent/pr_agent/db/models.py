@@ -440,6 +440,9 @@ class PRAgentConfig(SQLModel, table=True):
     auto_best_practices_config: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
     similar_issue_config: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
     litellm_config: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+    # Knowledge base: `/learn`, extraction rules, retrieval tuning. Surface
+    # through the Dashboard so operators can edit without redeploying.
+    knowledge_base_config: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
 
     # Ignore patterns as JSON arrays
     ignore_pr_title: Optional[list[str]] = Field(default=None, sa_column=Column(JSON))
@@ -521,6 +524,7 @@ class PRAgentConfigCreate(SQLModel):
     auto_best_practices_config: Optional[dict[str, Any]] = Field(default=None)
     similar_issue_config: Optional[dict[str, Any]] = Field(default=None)
     litellm_config: Optional[dict[str, Any]] = Field(default=None)
+    knowledge_base_config: Optional[dict[str, Any]] = Field(default=None)
 
     # Ignore patterns
     ignore_pr_title: Optional[list[str]] = Field(default=None)
@@ -582,6 +586,7 @@ class PRAgentConfigUpdate(SQLModel):
     auto_best_practices_config: Optional[dict[str, Any]] = Field(default=None)
     similar_issue_config: Optional[dict[str, Any]] = Field(default=None)
     litellm_config: Optional[dict[str, Any]] = Field(default=None)
+    knowledge_base_config: Optional[dict[str, Any]] = Field(default=None)
     ignore_pr_title: Optional[list[str]] = Field(default=None)
     ignore_pr_target_branches: Optional[list[str]] = Field(default=None)
     ignore_pr_source_branches: Optional[list[str]] = Field(default=None)
