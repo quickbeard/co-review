@@ -127,12 +127,12 @@ class PRLearn:
             )
             return
 
-        if not settings.get("knowledge_base.explicit_learn_enabled", False):
+        if not settings.get("knowledge_base.explicit_learn_enabled", True):
             self._publish(
-                "`/learn` is currently disabled for this installation. "
-                "An administrator can enable it by setting "
-                "`knowledge_base.explicit_learn_enabled = true` in the "
-                "Dashboard configuration."
+                "`/learn` is disabled for this installation. The reviewer "
+                "workflow is configured to capture learnings automatically "
+                "from PR comments that match the configured rules. An "
+                "administrator can re-enable `/learn` from the Dashboard."
             )
             return
 
