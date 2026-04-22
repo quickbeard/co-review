@@ -110,6 +110,49 @@ def _get_comment_api_url(body: Dict[str, Any]) -> str:
     return ""
 
 
+# Commands that we're willing to lift out of a quote-reply shape ahead of the
+# "must start with /" gate below. Kept narrow on purpose - we don't want a
+# user's quoted ``/review`` comment to accidentally re-trigger a review; but
+# ``/learn`` is low-risk (it just stores what it's given) and is the one
+# command people are most likely to reply-quote.
+_QUOTE_REPLY_SAFE_COMMANDS = ("/learn",)
+
+
+def _rewrite_quote_reply_with_command(comment_body: str) -> str | None:
+    """Reorder a quote-reply body so a recognised command is first.
+
+    Returns a rewritten ``/command <quoted text>`` string if the input looks
+    like ``> quoted line(s)\n/command [args]``, else ``None`` so the caller
+    can keep today's strict behaviour. We only move one of
+    ``_QUOTE_REPLY_SAFE_COMMANDS`` - any other slash command embedded in a
+    quote is left alone.
+    """
+    if not comment_body or not isinstance(comment_body, str):
+        return None
+    stripped = comment_body.strip()
+    if not stripped.startswith(">"):
+        return None
+    for command in _QUOTE_REPLY_SAFE_COMMANDS:
+        # ``/command`` must appear on its own line (possibly with args) so we
+        # don't false-positive on literal occurrences inside the quote block.
+        pattern = re.compile(
+            rf"(?m)^(?P<cmd>{re.escape(command)}(?:\s+[^\n]*)?)\s*$"
+        )
+        match = pattern.search(stripped)
+        if not match:
+            continue
+        command_line = match.group("cmd").strip()
+        before = stripped[: match.start()].rstrip()
+        after = stripped[match.end():].lstrip()
+        # Keep everything the user wrote minus the command line itself, and
+        # hand it to the tool as the "rest" payload. The tool reads the
+        # original body via ``learn_context`` anyway, but rewriting here keeps
+        # the generic dispatcher (which re-splits on whitespace) happy.
+        quoted_body = "\n".join(part for part in (before, after) if part)
+        return f"{command_line}\n{quoted_body}" if quoted_body else command_line
+    return None
+
+
 def _should_capture_learning(comment_body: str) -> bool:
     if not comment_body or not isinstance(comment_body, str):
         return False
@@ -328,6 +371,10 @@ async def handle_comments_on_pr(body: Dict[str, Any],
     if "comment" not in body:
         return {}
     comment_body = body.get("comment", {}).get("body")
+    # Preserve the user's original wording for tools that introspect the
+    # full comment (e.g. ``/learn`` extracting the quoted block). The
+    # dispatcher may rewrite ``comment_body`` below so the command is first.
+    original_comment_body = comment_body
     api_url = _get_comment_api_url(body)
     if not api_url:
         return {}
@@ -337,6 +384,15 @@ async def handle_comments_on_pr(body: Dict[str, Any],
             comment_body_split = comment_body.split('/ask')
             comment_body = '/ask' + comment_body_split[1] +' \n' +comment_body_split[0].strip().lstrip('>')
             get_logger().info(f"Reformatting comment_body so command is at the beginning: {comment_body}")
+        elif (rewritten := _rewrite_quote_reply_with_command(comment_body)) is not None:
+            # Quote-reply shape ("> quoted text\n/learn ...") - preserve the
+            # original body for ``/learn`` to extract the quoted learning
+            # text, then hand a dispatcher-friendly form downstream.
+            get_logger().info(
+                "Reformatting quote-reply so command is at the beginning: "
+                f"{rewritten[:120]}"
+            )
+            comment_body = rewritten
         else:
             # Rule-based automatic extraction runs when the admin disabled
             # `/learn`. When a rule matches, skip the legacy passive path so a
@@ -353,8 +409,9 @@ async def handle_comments_on_pr(body: Dict[str, Any],
     # Make rich comment context available to slash-command tools (notably
     # ``/learn``) without changing the ``handle_request`` signature. Tools read
     # this via ``get_settings().learn_context``. Kept minimal to avoid leaking
-    # webhook payload into unrelated tools.
-    _stash_learn_context(body, comment_body)
+    # webhook payload into unrelated tools. Stash the user's *original* body
+    # (pre-rewrite) so the tool can see the quote block when present.
+    _stash_learn_context(body, original_comment_body or comment_body)
     disable_eyes = False
     if "issue" in body and "pull_request" in body["issue"] and "url" in body["issue"]["pull_request"]:
         api_url = body["issue"]["pull_request"]["url"]
