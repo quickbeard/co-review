@@ -70,8 +70,21 @@
       "status": "Trạng thái",
       "active": "Hoạt động",
       "inactive": "Không hoạt động",
+      "webhooks": "Webhook",
+      "webhooksNone": "Không",
       "createdAt": "Ngày tạo",
       "actions": "Hành động"
+    },
+    "tabs": {
+      "ariaLabel": "Các phần cấu hình nhà cung cấp",
+      "credentials": "Thông tin xác thực",
+      "webhooks": "Webhook kho lưu trữ"
+    },
+    "webhooksTab": {
+      "title": "Webhook kho lưu trữ",
+      "description": "Đăng ký và quản lý webhook theo từng kho lưu trữ cho nhà cung cấp này.",
+      "appModeBanner": "Nhà cung cấp GitHub này được cấu hình dưới dạng GitHub App. Các cài đặt App tự gửi webhook về URL riêng của nó, nên không cần webhook theo từng kho ở đây. Quản lý sự kiện App trong phần cài đặt GitHub App.",
+      "unsupportedProvider": "Việc đăng ký webhook qua giao diện chưa hỗ trợ loại nhà cung cấp này. Các bản ghi hiện có vẫn được hiển thị để tham khảo."
     },
     "newProvider": {
       "title": "Thêm nhà cung cấp Git",

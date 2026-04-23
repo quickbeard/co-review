@@ -15,7 +15,6 @@ import {
   Lightbulb,
   Settings,
   Zap,
-  Webhook,
   BookOpen,
   ChevronLeft,
   ChevronRight,
@@ -47,9 +46,11 @@ interface NavItem {
 const navigation: NavItem[] = [
   { nameKey: "overview", href: "/", icon: LayoutDashboard },
   { nameKey: "analytics", href: "/analytics", icon: BarChart3 },
+  // Webhooks now live nested under each Git Provider (see the
+  // /git-providers/{id}/webhooks tab). The top-level /webhooks route still
+  // redirects to /git-providers so existing bookmarks keep working.
   { nameKey: "gitProviders", href: "/git-providers", icon: GitBranch },
   { nameKey: "llmProviders", href: "/llm-providers", icon: Brain },
-  { nameKey: "webhooks", href: "/webhooks", icon: Webhook },
   { nameKey: "learnings", href: "/learnings", icon: Lightbulb },
   {
     nameKey: "settings",

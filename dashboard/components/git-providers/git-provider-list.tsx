@@ -2,7 +2,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { MoreHorizontal, Pencil, Trash2, Power, PowerOff } from "lucide-react";
+import {
+  MoreHorizontal,
+  Pencil,
+  Trash2,
+  Power,
+  PowerOff,
+  Webhook,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -30,11 +37,20 @@ import type { GitProvider } from "@/lib/api/types";
 interface GitProviderListProps {
   providers: GitProvider[];
   lang: string;
+  // Map of provider id -> number of webhook registrations. Rendered as a
+  // small Webhooks column; passed in from the server page so we don't have
+  // to re-fetch client-side. Omit for callers that don't need the column.
+  webhookCounts?: Record<number, number>;
 }
 
-export function GitProviderList({ providers, lang }: GitProviderListProps) {
+export function GitProviderList({
+  providers,
+  lang,
+  webhookCounts,
+}: GitProviderListProps) {
   const dict = useDictionary();
   const router = useRouter();
+  const showWebhookColumn = !!webhookCounts;
 
   async function handleDelete(id: number, name: string) {
     if (!confirm(dict.gitProviders.deleteConfirm.replace("{name}", name))) {
@@ -82,6 +98,9 @@ export function GitProviderList({ providers, lang }: GitProviderListProps) {
             <TableHead>{dict.gitProviders.table.name}</TableHead>
             <TableHead>{dict.gitProviders.table.type}</TableHead>
             <TableHead>{dict.gitProviders.table.status}</TableHead>
+            {showWebhookColumn && (
+              <TableHead>{dict.gitProviders.table.webhooks}</TableHead>
+            )}
             <TableHead>{dict.gitProviders.table.createdAt}</TableHead>
             <TableHead className="w-[70px]"></TableHead>
           </TableRow>
@@ -100,6 +119,29 @@ export function GitProviderList({ providers, lang }: GitProviderListProps) {
                     : dict.gitProviders.table.inactive}
                 </Badge>
               </TableCell>
+              {showWebhookColumn && (
+                <TableCell>
+                  {(() => {
+                    const count = webhookCounts?.[provider.id] ?? 0;
+                    if (count === 0) {
+                      return (
+                        <span className="text-xs text-muted-foreground">
+                          {dict.gitProviders.table.webhooksNone}
+                        </span>
+                      );
+                    }
+                    return (
+                      <Link
+                        href={`/${lang}/git-providers/${provider.id}/webhooks`}
+                        className="inline-flex items-center gap-1.5 rounded-md bg-muted px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted/70 hover:text-foreground"
+                      >
+                        <Webhook className="size-3" />
+                        {count}
+                      </Link>
+                    );
+                  })()}
+                </TableCell>
+              )}
               <TableCell className="text-muted-foreground">
                 {new Date(provider.createdAt).toLocaleDateString()}
               </TableCell>
