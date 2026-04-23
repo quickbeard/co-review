@@ -29,6 +29,13 @@ interface WebhookFormProps {
   providers: GitProvider[];
   initial?: WebhookRegistration;
   mode: "create" | "edit";
+  // When set, the provider selector is hidden and the form operates as if
+  // this provider was the only choice. Used by the per-provider webhooks
+  // tab where the provider is implied by the route.
+  lockedProviderId?: number;
+  // Where to send the user on save/cancel. Defaults to the top-level
+  // /webhooks list to preserve existing behaviour when omitted.
+  returnHref?: string;
 }
 
 // Event presets per provider type. Mirrors the defaults the backend advertises
@@ -47,9 +54,17 @@ export function WebhookForm({
   providers,
   initial,
   mode,
+  lockedProviderId,
+  returnHref,
 }: WebhookFormProps) {
   const dict = useDictionary();
   const router = useRouter();
+
+  // Where the Cancel button and successful save redirect to. Nested
+  // (per-provider) callers pass a provider-scoped path; the standalone
+  // /webhooks route keeps the previous behaviour.
+  const defaultReturnHref = `/${lang}/webhooks`;
+  const navigateHome = returnHref ?? defaultReturnHref;
 
   // Filter to providers that are active AND whose type is supported by at
   // least one adapter (the backend will reject unsupported ones with 501;
@@ -60,7 +75,10 @@ export function WebhookForm({
   );
 
   const [providerId, setProviderId] = useState<number | "">(
-    initial?.git_provider_id ?? selectableProviders[0]?.id ?? "",
+    lockedProviderId ??
+      initial?.git_provider_id ??
+      selectableProviders[0]?.id ??
+      "",
   );
   const [repo, setRepo] = useState(initial?.repo ?? "");
   const [targetUrl, setTargetUrl] = useState(initial?.target_url ?? "");
@@ -119,7 +137,7 @@ export function WebhookForm({
           alert(result.error || dict.webhooks.errors.saveFailed);
           return;
         }
-        router.push(`/${lang}/webhooks`);
+        router.push(navigateHome);
         router.refresh();
       } else if (initial) {
         const result = await updateWebhook(initial.id, {
@@ -137,7 +155,7 @@ export function WebhookForm({
           alert(result.error || dict.webhooks.errors.saveFailed);
           return;
         }
-        router.push(`/${lang}/webhooks`);
+        router.push(navigateHome);
         router.refresh();
       }
     } finally {
@@ -147,33 +165,39 @@ export function WebhookForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className="space-y-2">
-          <Label htmlFor="provider">{dict.webhooks.form.provider}</Label>
-          <Select
-            value={providerId === "" ? "" : String(providerId)}
-            onValueChange={(v) => setProviderId(v ? Number(v) : "")}
-            disabled={mode === "edit"}
-          >
-            <SelectTrigger id="provider">
-              <SelectValue
-                placeholder={dict.webhooks.form.providerPlaceholder}
-              />
-            </SelectTrigger>
-            <SelectContent>
-              {selectableProviders.map((p) => (
-                <SelectItem key={p.id} value={String(p.id)}>
-                  {p.name} ({p.type})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {mode === "edit" && (
-            <p className="text-xs text-muted-foreground">
-              {dict.webhooks.form.providerLockedNote}
-            </p>
-          )}
-        </div>
+      <div
+        className={
+          lockedProviderId ? "space-y-2" : "grid gap-4 md:grid-cols-2"
+        }
+      >
+        {!lockedProviderId && (
+          <div className="space-y-2">
+            <Label htmlFor="provider">{dict.webhooks.form.provider}</Label>
+            <Select
+              value={providerId === "" ? "" : String(providerId)}
+              onValueChange={(v) => setProviderId(v ? Number(v) : "")}
+              disabled={mode === "edit"}
+            >
+              <SelectTrigger id="provider">
+                <SelectValue
+                  placeholder={dict.webhooks.form.providerPlaceholder}
+                />
+              </SelectTrigger>
+              <SelectContent>
+                {selectableProviders.map((p) => (
+                  <SelectItem key={p.id} value={String(p.id)}>
+                    {p.name} ({p.type})
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {mode === "edit" && (
+              <p className="text-xs text-muted-foreground">
+                {dict.webhooks.form.providerLockedNote}
+              </p>
+            )}
+          </div>
+        )}
 
         <div className="space-y-2">
           <Label htmlFor="repo">{dict.webhooks.form.repo}</Label>
@@ -309,7 +333,7 @@ export function WebhookForm({
         <Button
           type="button"
           variant="ghost"
-          onClick={() => router.push(`/${lang}/webhooks`)}
+          onClick={() => router.push(navigateHome)}
           disabled={saving}
         >
           {dict.webhooks.form.cancel}

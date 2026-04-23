@@ -70,8 +70,21 @@
       "status": "Status",
       "active": "Active",
       "inactive": "Inactive",
+      "webhooks": "Webhooks",
+      "webhooksNone": "None",
       "createdAt": "Created",
       "actions": "Actions"
+    },
+    "tabs": {
+      "ariaLabel": "Provider sections",
+      "credentials": "Credentials",
+      "webhooks": "Repository Webhooks"
+    },
+    "webhooksTab": {
+      "title": "Repository webhooks",
+      "description": "Register and manage per-repository webhooks for this provider.",
+      "appModeBanner": "This GitHub provider is configured as a GitHub App. App installations deliver webhooks to the App's own URL, so per-repository webhooks are not needed here. Manage App events in the GitHub App settings instead.",
+      "unsupportedProvider": "UI-managed webhook registration is not yet available for this provider type. Any existing rows are listed for reference."
     },
     "newProvider": {
       "title": "Add Git Provider",

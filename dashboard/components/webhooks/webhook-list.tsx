@@ -44,13 +44,36 @@ interface WebhookListProps {
   webhooks: WebhookRegistration[];
   providers: GitProvider[];
   lang: string;
+  // Nested (per-provider) callers hide the provider column and supply their
+  // own URLs for the "Add" empty-state CTA and per-row "Edit" link. Left
+  // undefined, the list falls back to the top-level /webhooks routes.
+  //
+  // Note: both must be plain strings (not functions) so this component can
+  // be passed them from a server component. `editHrefBase` is the directory
+  // that holds each webhook, i.e. the final URL becomes
+  // `${editHrefBase}/${webhook.id}/edit`.
+  hideProviderColumn?: boolean;
+  addHref?: string;
+  editHrefBase?: string;
 }
 
 type RowAction = "register" | "unregister" | "test" | "delete" | null;
 
-export function WebhookList({ webhooks, providers, lang }: WebhookListProps) {
+export function WebhookList({
+  webhooks,
+  providers,
+  lang,
+  hideProviderColumn,
+  addHref,
+  editHrefBase,
+}: WebhookListProps) {
   const dict = useDictionary();
   const router = useRouter();
+  const addCtaHref = addHref ?? `/${lang}/webhooks/new`;
+  const resolveEditHref = (w: WebhookRegistration) =>
+    editHrefBase
+      ? `${editHrefBase}/${w.id}/edit`
+      : `/${lang}/webhooks/${w.id}/edit`;
 
   const [busyId, setBusyId] = useState<number | null>(null);
   const [busyAction, setBusyAction] = useState<RowAction>(null);
@@ -126,7 +149,7 @@ export function WebhookList({ webhooks, providers, lang }: WebhookListProps) {
         <p className="mt-1 text-sm text-muted-foreground">
           {dict.webhooks.empty.description}
         </p>
-        <Link href={`/${lang}/webhooks/new`} className="mt-4">
+        <Link href={addCtaHref} className="mt-4">
           <Button>{dict.webhooks.addWebhook}</Button>
         </Link>
       </div>
@@ -140,7 +163,9 @@ export function WebhookList({ webhooks, providers, lang }: WebhookListProps) {
           <TableHeader>
             <TableRow>
               <TableHead>{dict.webhooks.table.repo}</TableHead>
-              <TableHead>{dict.webhooks.table.provider}</TableHead>
+              {!hideProviderColumn && (
+                <TableHead>{dict.webhooks.table.provider}</TableHead>
+              )}
               <TableHead>{dict.webhooks.table.url}</TableHead>
               <TableHead>{dict.webhooks.table.events}</TableHead>
               <TableHead>{dict.webhooks.table.status}</TableHead>
@@ -161,16 +186,18 @@ export function WebhookList({ webhooks, providers, lang }: WebhookListProps) {
                       </div>
                     )}
                   </TableCell>
-                  <TableCell>
-                    <div className="text-sm">
-                      {provider?.name ?? `#${w.git_provider_id}`}
-                    </div>
-                    {provider && (
-                      <div className="text-xs text-muted-foreground">
-                        {provider.type}
+                  {!hideProviderColumn && (
+                    <TableCell>
+                      <div className="text-sm">
+                        {provider?.name ?? `#${w.git_provider_id}`}
                       </div>
-                    )}
-                  </TableCell>
+                      {provider && (
+                        <div className="text-xs text-muted-foreground">
+                          {provider.type}
+                        </div>
+                      )}
+                    </TableCell>
+                  )}
                   <TableCell className="max-w-[240px]">
                     <code className="block truncate font-mono text-xs text-muted-foreground">
                       {w.target_url}
@@ -242,7 +269,7 @@ export function WebhookList({ webhooks, providers, lang }: WebhookListProps) {
                         </DropdownMenuItem>
                         <DropdownMenuItem>
                           <Link
-                            href={`/${lang}/webhooks/${w.id}/edit`}
+                            href={resolveEditHref(w)}
                             className="flex w-full items-center"
                           >
                             <Pencil className="mr-2 h-4 w-4" />
