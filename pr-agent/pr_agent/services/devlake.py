@@ -1,0 +1,251 @@
+"""
+Helpers for orchestrating Apache DevLake integration.
+
+This module intentionally keeps the integration explicit and backend-only:
+- read provider credentials from our DB
+- call DevLake APIs to create connection/scopes/blueprint
+- trigger ingestion and return pipeline metadata
+"""
+
+from __future__ import annotations
+
+import json
+import os
+from dataclasses import dataclass
+from typing import Any
+from urllib import error, parse, request
+
+from fastapi import HTTPException
+
+from pr_agent.db import DevLakeIntegration, GitProvider
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    value = os.environ.get(name)
+    if value is None:
+        return default
+    return value.lower() in {"1", "true", "yes", "on"}
+
+
+@dataclass
+class DevLakeSettings:
+    base_url: str
+    api_prefix: str
+    timeout_sec: float
+    auth_header: str
+    auth_scheme: str
+    token: str | None
+    verify_tls: bool
+
+
+def load_settings() -> DevLakeSettings:
+    base_url = os.environ.get("DEVLAKE_API_BASE_URL", "").strip().rstrip("/")
+    if not base_url:
+        raise HTTPException(
+            status_code=400,
+            detail="DEVLAKE_API_BASE_URL is not configured",
+        )
+
+    api_prefix = os.environ.get("DEVLAKE_API_PREFIX", "/api").strip()
+    if not api_prefix.startswith("/"):
+        api_prefix = f"/{api_prefix}"
+    api_prefix = api_prefix.rstrip("/")
+
+    return DevLakeSettings(
+        base_url=base_url,
+        api_prefix=api_prefix,
+        timeout_sec=float(os.environ.get("DEVLAKE_API_TIMEOUT_SEC", "30")),
+        auth_header=os.environ.get("DEVLAKE_API_AUTH_HEADER", "Authorization"),
+        auth_scheme=os.environ.get("DEVLAKE_API_AUTH_SCHEME", "Bearer"),
+        token=os.environ.get("DEVLAKE_API_TOKEN"),
+        verify_tls=_env_bool("DEVLAKE_API_VERIFY_TLS", True),
+    )
+
+
+class DevLakeClient:
+    def __init__(self, settings: DevLakeSettings):
+        self.settings = settings
+
+    def _build_url(self, path: str, query: dict[str, Any] | None = None) -> str:
+        normalized_path = path if path.startswith("/") else f"/{path}"
+        prefix = self.settings.api_prefix
+        if normalized_path.startswith(prefix):
+            full_path = normalized_path
+        else:
+            full_path = f"{prefix}{normalized_path}"
+        url = f"{self.settings.base_url}{full_path}"
+        if query:
+            url = f"{url}?{parse.urlencode(query, doseq=True)}"
+        return url
+
+    def _request(
+        self,
+        method: str,
+        path: str,
+        payload: dict[str, Any] | None = None,
+        query: dict[str, Any] | None = None,
+    ) -> Any:
+        url = self._build_url(path, query=query)
+        body = None
+        headers: dict[str, str] = {"Accept": "application/json"}
+
+        if payload is not None:
+            body = json.dumps(payload).encode("utf-8")
+            headers["Content-Type"] = "application/json"
+
+        if self.settings.token:
+            token_value = self.settings.token
+            if self.settings.auth_scheme:
+                token_value = f"{self.settings.auth_scheme} {token_value}"
+            headers[self.settings.auth_header] = token_value
+
+        req = request.Request(url=url, data=body, headers=headers, method=method.upper())
+        try:
+            with request.urlopen(req, timeout=self.settings.timeout_sec) as resp:
+                raw = resp.read()
+                if not raw:
+                    return {}
+                return json.loads(raw.decode("utf-8"))
+        except error.HTTPError as exc:
+            detail = exc.read().decode("utf-8", errors="ignore")
+            raise HTTPException(
+                status_code=502,
+                detail=f"DevLake API error ({exc.code}): {detail or exc.reason}",
+            ) from exc
+        except error.URLError as exc:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Cannot reach DevLake API: {exc.reason}",
+            ) from exc
+
+    def create_connection(self, plugin_name: str, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._request("POST", f"/plugins/{plugin_name}/connections", payload=payload)
+
+    def list_remote_scopes(
+        self,
+        plugin_name: str,
+        connection_id: int,
+        *,
+        page: int = 1,
+        page_size: int = 100,
+        search_term: str | None = None,
+    ) -> dict[str, Any]:
+        query: dict[str, Any] = {"page": page, "pageSize": page_size}
+        if search_term:
+            query["searchTerm"] = search_term
+        return self._request(
+            "GET",
+            f"/plugins/{plugin_name}/connections/{connection_id}/remote-scopes",
+            query=query,
+        )
+
+    def put_scopes(self, plugin_name: str, connection_id: int, scopes: list[dict[str, Any]]) -> Any:
+        return self._request(
+            "PUT",
+            f"/plugins/{plugin_name}/connections/{connection_id}/scopes",
+            payload={"data": scopes},
+        )
+
+    def create_blueprint(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/blueprints", payload=payload)
+
+    def patch_blueprint(self, blueprint_id: int, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._request("PATCH", f"/blueprints/{blueprint_id}", payload=payload)
+
+    def trigger_blueprint(
+        self,
+        blueprint_id: int,
+        *,
+        full_sync: bool = False,
+        skip_collectors: bool = False,
+    ) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            f"/blueprints/{blueprint_id}/trigger",
+            payload={"fullSync": full_sync, "skipCollectors": skip_collectors},
+        )
+
+
+def map_provider_to_plugin(provider: GitProvider) -> str:
+    mapping = {
+        "github": "github",
+        "gitlab": "gitlab",
+        "bitbucket": "bitbucket",
+        "azure_devops": "azuredevops",
+    }
+    key = provider.type.value if hasattr(provider.type, "value") else str(provider.type)
+    plugin = mapping.get(key)
+    if not plugin:
+        raise HTTPException(
+            status_code=400,
+            detail=f"DevLake integration is not yet supported for provider type '{key}'",
+        )
+    return plugin
+
+
+def build_connection_payload(provider: GitProvider, plugin_name: str) -> dict[str, Any]:
+    payload: dict[str, Any] = {"name": provider.name}
+
+    if plugin_name == "github":
+        payload["endpoint"] = provider.base_url or "https://api.github.com"
+        if not provider.access_token:
+            raise HTTPException(status_code=400, detail="GitHub provider requires access_token for DevLake sync")
+        payload["token"] = provider.access_token
+    elif plugin_name == "gitlab":
+        payload["endpoint"] = provider.base_url or "https://gitlab.com/api/v4"
+        if not provider.access_token:
+            raise HTTPException(status_code=400, detail="GitLab provider requires access_token for DevLake sync")
+        payload["token"] = provider.access_token
+    elif plugin_name == "bitbucket":
+        payload["endpoint"] = provider.base_url or "https://api.bitbucket.org/2.0"
+        if not provider.access_token:
+            raise HTTPException(status_code=400, detail="Bitbucket provider requires access_token for DevLake sync")
+        payload["token"] = provider.access_token
+    elif plugin_name == "azuredevops":
+        payload["endpoint"] = provider.base_url or "https://dev.azure.com"
+        token = provider.pat or provider.access_token
+        if not token:
+            raise HTTPException(status_code=400, detail="Azure DevOps provider requires pat/access_token for DevLake sync")
+        payload["token"] = token
+        if provider.organization:
+            payload["organization"] = provider.organization
+
+    return payload
+
+
+def build_blueprint_payload(
+    *,
+    integration: DevLakeIntegration,
+    plugin_name: str,
+) -> dict[str, Any]:
+    if not integration.connection_id:
+        raise HTTPException(status_code=500, detail="Missing DevLake connection_id on integration row")
+    if not integration.project_name:
+        raise HTTPException(status_code=400, detail="project_name is required for DevLake sync")
+
+    selected_scopes = integration.selected_scopes or []
+    blueprint_scopes = []
+    for scope in selected_scopes:
+        scope_id = scope.get("scopeId") or scope.get("id")
+        if scope_id is None:
+            continue
+        blueprint_scopes.append({"scopeId": str(scope_id)})
+
+    return {
+        "name": f"{integration.project_name}-BLUEPRINT",
+        "projectName": integration.project_name,
+        "mode": "NORMAL",
+        "enable": True,
+        "cronConfig": "manual",
+        "isManual": True,
+        "skipOnFail": False,
+        "skipCollectors": False,
+        "fullSync": False,
+        "connections": [
+            {
+                "pluginName": plugin_name,
+                "connectionId": integration.connection_id,
+                "scopes": blueprint_scopes,
+            }
+        ],
+    }
