@@ -6,7 +6,8 @@ enable_auto_approval = true
 pr_commands = [
     "/describe --pr_description.publish_description_as_comment=true",
     "/improve",
-    "/agentic_review"
+    "/agentic_review",
+    "/review"
 ]
 
 handle_push_trigger = true
@@ -18,3 +19,11 @@ push_commands = [
 [review_agent]
 enabled = true
 publish_output = true
+
+[knowledge_base]
+enabled = true
+provider = "mem0"
+chroma_path = "./.mem0/chroma"
+capture_from_pr_comments = true
+apply_to_review = true
+embedding_model = "text"

@@ -4,13 +4,18 @@
   },
   "nav": {
     "overview": "Tổng quan",
+    "analytics": "Phân tích",
     "gitProviders": "Nhà cung cấp Git",
     "llmProviders": "Nhà cung cấp LLM",
+    "automation": "Tự động hóa",
+    "webhooks": "Webhooks",
+    "learnings": "Bài học",
     "repositories": "Kho lưu trữ",
     "llmServers": "Máy chủ LLM",
     "reviewContexts": "Ngữ cảnh đánh giá",
     "reviews": "Đánh giá",
-    "settings": "Cài đặt"
+    "settings": "Cài đặt",
+    "knowledgeBase": "Cơ sở tri thức"
   },
   "sidebar": {
     "expandSidebar": "Mở rộng thanh bên",
@@ -24,13 +29,15 @@
     "welcome": "Chào mừng đến với CoReview",
     "description": "Quản lý đánh giá code và phân tích PR bằng AI từ một nơi.",
     "gitProviders": "Nhà cung cấp Git",
-    "connectedProviders": "Nhà cung cấp đã kết nối",
+    "connectedProviders": "{n} đang hoạt động",
     "repositories": "Kho lưu trữ",
-    "trackedRepos": "Kho đang theo dõi",
+    "trackedRepos": "Theo dõi qua webhook và kiến thức",
     "llmServers": "Máy chủ LLM",
-    "activeServers": "Máy chủ đang hoạt động",
-    "reviews": "Đánh giá",
-    "totalReviews": "Tổng số đánh giá",
+    "activeServers": "{n} đang hoạt động",
+    "learnings": "Kiến thức",
+    "capturedLearnings": "Kiến thức thu thập được qua các kho",
+    "reviewedPRs": "PR đã review",
+    "reviewedPRsDesc": "{n} lượt chạy công cụ review",
     "gettingStarted": "Bắt đầu",
     "gettingStartedDesc": "Để bắt đầu sử dụng CoReview, hãy làm theo các bước sau:",
     "step1": "Kết nối nhà cung cấp Git (GitHub, GitLab, v.v.)",
@@ -65,8 +72,21 @@
       "status": "Trạng thái",
       "active": "Hoạt động",
       "inactive": "Không hoạt động",
+      "webhooks": "Webhook",
+      "webhooksNone": "Không",
       "createdAt": "Ngày tạo",
       "actions": "Hành động"
+    },
+    "tabs": {
+      "ariaLabel": "Các phần cấu hình nhà cung cấp",
+      "credentials": "Thông tin xác thực",
+      "webhooks": "Webhook kho lưu trữ"
+    },
+    "webhooksTab": {
+      "title": "Webhook kho lưu trữ",
+      "description": "Đăng ký và quản lý webhook theo từng kho lưu trữ cho nhà cung cấp này.",
+      "appModeBanner": "Nhà cung cấp GitHub này được cấu hình dưới dạng GitHub App. Các cài đặt App tự gửi webhook về URL riêng của nó, nên không cần webhook theo từng kho ở đây. Quản lý sự kiện App trong phần cài đặt GitHub App.",
+      "unsupportedProvider": "Việc đăng ký webhook qua giao diện chưa hỗ trợ loại nhà cung cấp này. Các bản ghi hiện có vẫn được hiển thị để tham khảo."
     },
     "newProvider": {
       "title": "Thêm nhà cung cấp Git",
@@ -259,6 +279,138 @@
       "setDefault": "Đặt làm mặc định"
     }
   },
+  "analytics": {
+    "title": "Phân tích",
+    "description": "Thông tin kỹ thuật từ Apache DevLake — hiển thị qua Grafana.",
+    "openInGrafana": "Mở trong Grafana",
+    "refresh": "Làm mới",
+    "notConfigured": {
+      "title": "Chưa cấu hình bảng điều khiển Grafana",
+      "description": "Thiết lập biến môi trường NEXT_PUBLIC_DEVLAKE_GRAFANA_URL tới URL nhúng bảng Grafana của Apache DevLake.",
+      "hint": "Ví dụ: http://localhost:3002/d/<dashboard-uid>/<slug>?orgId=1&kiosk=tv&theme=light"
+    },
+    "loadError": {
+      "title": "Không thể hiển thị bảng điều khiển",
+      "description": "Trình duyệt đã chặn Grafana nhúng. Hãy kiểm tra Grafana đã bật allow_embedding = true và URL đúng chưa."
+    }
+  },
+  "learnings": {
+    "title": "Bài học",
+    "description": "Kiến thức AI đã rút ra từ các cuộc thảo luận PR trước đây.",
+    "disabled": {
+      "title": "Knowledge base đang tắt",
+      "description": "Bật KNOWLEDGE_BASE__ENABLED trong cấu hình PR-Agent để bắt đầu thu thập bài học."
+    },
+    "empty": {
+      "title": "Chưa có bài học nào",
+      "description": "Bài học sẽ xuất hiện sau khi người đánh giá phản hồi các bình luận review PR để hướng dẫn AI."
+    },
+    "filters": {
+      "repo": "Kho lưu trữ",
+      "allRepos": "Tất cả kho lưu trữ",
+      "limit": "Giới hạn",
+      "refresh": "Làm mới",
+      "sourceType": "Loại nguồn",
+      "allSources": "Tất cả nguồn",
+      "status": "Trạng thái",
+      "allStatuses": "Tất cả trạng thái"
+    },
+    "table": {
+      "repo": "Kho lưu trữ",
+      "learning": "Bài học",
+      "createdAt": "Ngày thu thập",
+      "source": "Nguồn",
+      "status": "Trạng thái",
+      "actions": "Hành động"
+    },
+    "source": {
+      "pr": "PR #{pr}",
+      "unknown": "—"
+    },
+    "sourceType": {
+      "explicit_learn": "Lệnh /learn",
+      "passive_capture": "@-nhắc (cũ)",
+      "automatic_extraction": "Khớp quy tắc",
+      "manual_import": "Nhập thủ công",
+      "unknown": "Không rõ"
+    },
+    "status": {
+      "raw": "Đang tinh chỉnh",
+      "refined": "Sẵn sàng",
+      "rejected": "Bị từ chối",
+      "raw_tooltip": "Đã lưu nguyên văn. Tác vụ nền sẽ tinh chỉnh trước khi áp dụng vào review.",
+      "refined_tooltip": "Sẵn sàng áp dụng cho các review tiếp theo.",
+      "rejected_tooltip": "Đã bị từ chối trong quá trình tinh chỉnh. Hãy xem lại hoặc xóa.",
+      "rejection_reason_label": "Lý do"
+    },
+    "actions": {
+      "delete": "Xóa",
+      "deleting": "Đang xóa...",
+      "view": "Xem chi tiết"
+    },
+    "deleteDialog": {
+      "title": "Xóa bài học",
+      "description": "Hành động này sẽ xóa bài học khỏi knowledge base và không thể hoàn tác.",
+      "cancel": "Hủy",
+      "confirm": "Xóa"
+    },
+    "apiError": "Không thể kết nối với PR-Agent API",
+    "stats": {
+      "total": "Tổng số bài học",
+      "repos": "Số kho lưu trữ"
+    }
+  },
+  "automation": {
+    "title": "Tự động hóa",
+    "description": "Kiểm soát các lệnh PR-Agent chạy tự động khi pull request được mở hoặc cập nhật. Các thay đổi có hiệu lực ở lần webhook tiếp theo — không cần triển khai lại.",
+    "global": {
+      "title": "Công tắc toàn cục",
+      "description": "Các thiết lập áp dụng cho mọi nhà cung cấp git.",
+      "disableAutoFeedback": "Tắt toàn bộ phản hồi tự động",
+      "disableAutoFeedbackHelp": "Khi bật, PR-Agent sẽ không chạy bất kỳ công cụ tự động nào trên PR mới hoặc push. Các lệnh kích hoạt qua bình luận vẫn hoạt động."
+    },
+    "provider": {
+      "title": "Hành vi theo nhà cung cấp",
+      "description": "Chọn lệnh nào sẽ chạy tự động trên từng nhà cung cấp git."
+    },
+    "providers": {
+      "github": "GitHub",
+      "gitlab": "GitLab",
+      "bitbucket": "Bitbucket",
+      "azure": "Azure DevOps",
+      "gitea": "Gitea"
+    },
+    "fields": {
+      "prCommands": "Lệnh khi mở PR",
+      "prCommandsHelp": "Chạy khi PR được mở, mở lại hoặc chuyển sang sẵn sàng xem xét. Thêm các lệnh slash như /review, /describe, /improve.",
+      "prCommandsEmpty": "Không có lệnh nào chạy tự động trên PR mới.",
+      "pushCommands": "Lệnh khi push lên PR đang mở",
+      "pushCommandsHelp": "Chạy khi có commit mới được push lên PR đang mở. Yêu cầu bật trigger push.",
+      "pushCommandsEmpty": "Không có lệnh nào chạy khi push.",
+      "handlePushTrigger": "Bật trigger push",
+      "handlePushTriggerHelp": "Lắng nghe commit push lên PR đang mở và chạy các lệnh push phía trên.",
+      "handlePrActions": "Sự kiện PR kích hoạt lệnh",
+      "handlePrActionsHelp": "Loại sự kiện pull_request của GitHub nào sẽ gọi các lệnh PR.",
+      "feedbackOnDraft": "Chạy trên PR nháp",
+      "feedbackOnDraftHelp": "Mặc định PR-Agent bỏ qua PR nháp. Bật để đưa vào xử lý.",
+      "add": "Thêm"
+    },
+    "actions": {
+      "save": "Lưu thay đổi",
+      "saving": "Đang lưu…",
+      "reload": "Tải lại cache webhook",
+      "reloadHelp": "Buộc dịch vụ webhook đọc lại cấu hình từ cơ sở dữ liệu ở lần webhook tiếp theo."
+    },
+    "messages": {
+      "saved": "Đã lưu cấu hình tự động hóa. Dịch vụ webhook sẽ áp dụng thay đổi ở lần webhook tiếp theo.",
+      "reloaded": "Đã làm mới cache webhook."
+    },
+    "errors": {
+      "loadFailed": "Không tải được cấu hình tự động hóa.",
+      "saveFailed": "Không lưu được cấu hình tự động hóa.",
+      "reloadFailed": "Không tải lại được cache webhook."
+    }
+  },
   "tokenLimits": {
     "title": "Giới hạn Token",
     "description": "Cấu hình giới hạn token cho mô tả PR, commit và cửa sổ ngữ cảnh mô hình.",
@@ -278,6 +430,169 @@
       "saveSuccess": "Giới hạn token đã được cập nhật thành công.",
       "resetSuccess": "Giới hạn token đã được đặt lại về mặc định.",
       "errorGeneric": "Đã xảy ra lỗi. Vui lòng thử lại."
+    }
+  },
+  "webhooks": {
+    "title": "Webhooks",
+    "description": "Đăng ký và quản lý webhook theo kho lưu trữ trên các nhà cung cấp git.",
+    "addWebhook": "Thêm Webhook",
+    "newTitle": "Webhook mới",
+    "newDescription": "Tạo webhook nháp, sau đó đăng ký với nhà cung cấp.",
+    "editTitle": "Sửa Webhook",
+    "editDescription": "Cập nhật cấu hình webhook. Lưu thay đổi trước khi đăng ký lại.",
+    "deleteConfirm": "Xóa webhook cho {repo}? Thao tác này cũng xóa khỏi nhà cung cấp.",
+    "empty": {
+      "title": "Chưa có webhook nào",
+      "description": "Đăng ký webhook để bắt đầu nhận sự kiện từ kho lưu trữ."
+    },
+    "table": {
+      "repo": "Kho lưu trữ",
+      "provider": "Nhà cung cấp",
+      "url": "URL mục tiêu",
+      "events": "Sự kiện",
+      "status": "Trạng thái",
+      "actions": "Hành động"
+    },
+    "status": {
+      "draft": "Nháp",
+      "registered": "Đã đăng ký",
+      "failed": "Lỗi",
+      "deleted": "Đã xóa"
+    },
+    "actions": {
+      "register": "Đăng ký với nhà cung cấp",
+      "registering": "Đang đăng ký...",
+      "unregister": "Hủy đăng ký",
+      "test": "Gửi ping thử",
+      "deliveries": "Xem lịch sử",
+      "edit": "Sửa",
+      "delete": "Xóa"
+    },
+    "form": {
+      "back": "Quay lại webhooks",
+      "provider": "Nhà cung cấp Git",
+      "providerPlaceholder": "Chọn nhà cung cấp",
+      "providerLockedNote": "Không thể thay đổi nhà cung cấp sau khi tạo. Xóa và tạo lại để chuyển đổi.",
+      "repo": "Kho lưu trữ",
+      "repoPlaceholder": "chủ-sở-hữu/kho",
+      "repoHint": "Định dạng tùy nhà cung cấp: owner/repo (GitHub), group/project (GitLab).",
+      "targetUrl": "URL mục tiêu",
+      "useSuggested": "Dùng URL đề xuất",
+      "events": "Sự kiện",
+      "eventsHint": "Để trống để dùng mặc định của nhà cung cấp. Bấm preset hoặc thêm sự kiện tùy chỉnh.",
+      "eventsPlaceholder": "VD: pull_request",
+      "eventsEmpty": "Chưa đặt sự kiện - sẽ dùng mặc định của nhà cung cấp.",
+      "addEvent": "Thêm",
+      "contentType": "Kiểu nội dung",
+      "secret": "Khóa ký",
+      "secretPlaceholder": "Để trống để tự tạo",
+      "secretKeepPlaceholder": "Để trống để giữ nguyên",
+      "secretHintCreate": "Dùng để ký payload. Khóa ngẫu nhiên sẽ được tạo nếu để trống.",
+      "secretHintEdit": "Nhập giá trị mới để xoay khóa. Để trống để giữ khóa hiện tại.",
+      "active": "Hoạt động",
+      "activeHint": "Webhook không hoạt động vẫn được lưu nhưng nhà cung cấp sẽ không gửi sự kiện.",
+      "insecureSsl": "Bỏ qua xác minh SSL",
+      "insecureSslHint": "Tắt kiểm tra chứng chỉ TLS. Không khuyến nghị.",
+      "cancel": "Hủy",
+      "saveCreate": "Tạo nháp",
+      "saveUpdate": "Lưu thay đổi"
+    },
+    "deliveries": {
+      "title": "Lịch sử giao gần đây",
+      "loading": "Đang tải lịch sử...",
+      "empty": "Chưa có lịch sử giao."
+    },
+    "messages": {
+      "working": "Đang xử lý...",
+      "testSent": "Đã gửi ping thử."
+    },
+    "errors": {
+      "apiError": "Không thể tải webhooks",
+      "actionFailed": "Thao tác thất bại. Kiểm tra thông tin xác thực nhà cung cấp và thử lại.",
+      "fetchDeliveriesFailed": "Không thể tải lịch sử giao.",
+      "saveFailed": "Không thể lưu webhook.",
+      "providerRequired": "Vui lòng chọn một nhà cung cấp git."
+    }
+  },
+  "settings": {
+    "title": "Cài đặt",
+    "description": "Quản lý hành vi của CoReview cho tự động hóa và thu thập tri thức.",
+    "backToSettings": "Quay lại Cài đặt",
+    "sections": {
+      "automation": {
+        "title": "Tự động hóa",
+        "description": "Cấu hình các lệnh chạy tự động trên PR và push, theo từng nhà cung cấp git."
+      },
+      "knowledgeBase": {
+        "title": "Cơ sở tri thức",
+        "description": "Điều khiển lệnh /learn, thu thập tự động theo quy tắc, truy xuất và tinh chỉnh."
+      }
+    }
+  },
+  "knowledgeBase": {
+    "title": "Cơ sở tri thức",
+    "description": "Lưu lại phản hồi của người review thành các bài học bền vững và đưa chúng vào review sau này.",
+    "master": {
+      "title": "Trạng thái",
+      "description": "Tắt cơ sở tri thức sẽ tạm dừng cả thu thập lẫn truy xuất. Dữ liệu đã có vẫn được giữ nguyên.",
+      "enabledLabel": "Bật cơ sở tri thức",
+      "enabledHelp": "Khi tắt, lệnh /learn sẽ bị từ chối và các bài học cũ không được đưa vào review."
+    },
+    "capture": {
+      "title": "Thu thập",
+      "description": "Chọn cách biến comment PR thành bài học: lệnh /learn rõ ràng hoặc khớp quy tắc tự động.",
+      "explicitLearnLabel": "Bật lệnh /learn",
+      "explicitLearnHelp": "Người review gõ /learn <nội dung> để lưu. Được khuyến nghị. Tắt để chuyển sang khớp quy tắc.",
+      "commandLabel": "Ký hiệu lệnh",
+      "commandHelp": "Ký hiệu người review gõ để lưu bài học. Mặc định là /learn."
+    },
+    "rules": {
+      "title": "Quy tắc trích xuất tự động",
+      "activeHelp": "Các quy tắc so khớp không phân biệt hoa thường trong mỗi comment. Khi trúng, toàn bộ comment được lưu làm bài học. Đang hoạt động vì lệnh /learn đã tắt.",
+      "disabledHelp": "Quy tắc chỉ chạy khi lệnh /learn bị tắt. Chúng tôi vẫn lưu danh sách này để sẵn sàng cho lần bật lại.",
+      "label": "Cụm từ quy tắc",
+      "description": "Mọi cụm từ dưới đây xuất hiện trong comment sẽ kích hoạt thu thập.",
+      "placeholder": "ví dụ: we prefer",
+      "emptyLabel": "Chưa có quy tắc nào.",
+      "addLabel": "Thêm quy tắc"
+    },
+    "retrieval": {
+      "title": "Truy xuất",
+      "description": "Điều khiển cách các bài học cũ xuất hiện trong review.",
+      "applyToReviewLabel": "Đưa bài học vào /review",
+      "applyToReviewHelp": "Khi bật, các bài học phù hợp được gộp vào ngữ cảnh PR-Agent dùng cho /review.",
+      "maxRetrievedLabel": "Số bài học tối đa mỗi review",
+      "maxRetrievedHelp": "Giới hạn số bài học PR-Agent có thể đính kèm cho mỗi review.",
+      "maxSummaryLabel": "Số ký tự tóm tắt tối đa",
+      "maxSummaryHelp": "Cắt mỗi đoạn tóm tắt bài học về số ký tự này."
+    },
+    "refinement": {
+      "title": "Tinh chỉnh",
+      "description": "Cài đặt cho worker nền giai đoạn 2. Worker lấy bài học thô và tinh chỉnh thành bản hoàn thiện.",
+      "duplicateThresholdLabel": "Ngưỡng trùng lặp",
+      "duplicateThresholdHelp": "Cosine similarity mà trên đó hai bài học bị xem là trùng (0-1). Cao hơn là khắt khe hơn."
+    },
+    "legacy": {
+      "title": "Thu thập thụ động (cũ)",
+      "deprecatedBadge": "Không còn dùng",
+      "description": "Cách thu thập cũ dựa vào @-mention. Giữ để tương thích ngược; sẽ được gỡ trong bản sau.",
+      "captureLabel": "Thu thập từ comment có @-mention",
+      "captureHelp": "Quét các comment tag bot để tìm cụm từ ưu tiên. Được thay thế bằng lệnh /learn và quy tắc ở trên.",
+      "requireMentionLabel": "Bắt buộc @-mention",
+      "requireMentionHelp": "Chỉ xét các comment có tag bot. Bị bỏ qua khi thu thập thụ động đang tắt."
+    },
+    "actions": {
+      "save": "Lưu thay đổi",
+      "reload": "Nạp lại từ DB"
+    },
+    "messages": {
+      "saved": "Đã lưu cấu hình cơ sở tri thức. Các tiến trình webhook sẽ lấy thay đổi ở lần deliver kế tiếp.",
+      "reloaded": "Đã làm mới cache. Lần deliver webhook tới sẽ đọc lại cấu hình từ database."
+    },
+    "errors": {
+      "loadFailed": "Không thể tải cấu hình cơ sở tri thức.",
+      "saveFailed": "Không thể lưu cấu hình cơ sở tri thức.",
+      "reloadFailed": "Không thể làm mới cache cấu hình."
     }
   }
 }

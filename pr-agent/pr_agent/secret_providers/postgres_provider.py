@@ -6,7 +6,9 @@ Falls back to .secrets.toml if no matching provider is found in the database.
 """
 
 import os
-from typing import Optional
+import threading
+import time
+from typing import Any, Optional
 
 # LLM provider type to settings key mapping
 LLM_PROVIDER_SETTINGS_MAP = {
@@ -571,6 +573,243 @@ def apply_postgres_credentials_to_config():
                 if llm_creds.get("model_id"):
                     get_settings().set("LITELLM.MODEL_ID", llm_creds["model_id"])
 
+        # Apply automation config (per-provider pr_commands, push_commands, toggles).
+        apply_automation_config_to_settings()
+
+        # Apply knowledge-base config (/learn flag, extraction rules, retrieval tuning).
+        apply_knowledge_base_config_to_settings()
+
     except Exception:
         # Silently fail - fall back to .secrets.toml
+        pass
+
+
+# =============================================================================
+# Automation config (per-provider pr_commands / push_commands / toggles).
+#
+# These live in the JSON columns of the default PRAgentConfig row and are
+# written from the Dashboard so administrators can change auto-review behavior
+# without editing .pr_agent.toml or redeploying the webhook service.
+# =============================================================================
+
+# Mapping from PRAgentConfig JSON column to the Dynaconf section that
+# pr-agent reads at runtime. Keep keys within each JSON in sync with the
+# TOML keys in pr_agent/settings/configuration.toml.
+_AUTOMATION_SECTION_MAP: dict[str, str] = {
+    "github_app_config": "GITHUB_APP",
+    "gitlab_config": "GITLAB",
+    "bitbucket_app_config": "BITBUCKET_APP",
+    "azure_devops_config": "AZURE_DEVOPS_SERVER",
+    "gitea_config": "GITEA",
+}
+
+# Keys we allow the dashboard to push into Dynaconf. Additional keys stored in
+# the JSON column are ignored here (they can be exposed later without changing
+# the loader).
+_AUTOMATION_ALLOWED_KEYS: tuple[str, ...] = (
+    "pr_commands",
+    "push_commands",
+    "handle_push_trigger",
+    "handle_pr_actions",
+    "feedback_on_draft_pr",
+)
+
+
+def _fetch_automation_config() -> Optional[dict[str, Any]]:
+    """Return the default PRAgentConfig row as a plain dict, or None.
+
+    `disable_auto_feedback` is read from its dedicated column (added by
+    Alembic revision `0002_add_disable_auto_feedback`). Each provider's JSON
+    column is returned verbatim so the caller can push per-provider keys
+    (pr_commands, push_commands, handle_push_trigger, …) into Dynaconf.
+    """
+    provider = get_postgres_credential_provider()
+    provider._init_db()
+    if not provider._initialized or not provider._engine:
+        return None
+
+    try:
+        from sqlmodel import Session, select
+
+        from pr_agent.db.models import PRAgentConfig
+
+        with Session(provider._engine) as session:
+            statement = select(PRAgentConfig).where(PRAgentConfig.is_default == True).limit(1)  # noqa: E712
+            config = session.exec(statement).first()
+            if not config:
+                return None
+
+            return {
+                "id": config.id,
+                "disable_auto_feedback": bool(config.disable_auto_feedback),
+                "github_app_config": config.github_app_config or {},
+                "gitlab_config": config.gitlab_config or {},
+                "bitbucket_app_config": config.bitbucket_app_config or {},
+                "azure_devops_config": config.azure_devops_config or {},
+                "gitea_config": config.gitea_config or {},
+            }
+    except Exception:
+        return None
+
+
+def apply_automation_config_to_settings() -> None:
+    """Push automation config from the default PRAgentConfig row into Dynaconf.
+
+    Safe to call repeatedly; only known keys are written and values must be
+    JSON-compatible. Missing DATABASE_URL or missing config row is a no-op.
+    """
+    if not os.environ.get("DATABASE_URL"):
+        return
+
+    config = _fetch_automation_config()
+    if not config:
+        return
+
+    try:
+        from pr_agent.config_loader import get_settings
+
+        settings = get_settings()
+
+        # Set the global flag unconditionally so toggling it OFF on the
+        # dashboard reliably propagates to the webhook process (otherwise a
+        # previous True value would linger in Dynaconf).
+        settings.set("CONFIG.DISABLE_AUTO_FEEDBACK", bool(config.get("disable_auto_feedback")))
+
+        for column, section in _AUTOMATION_SECTION_MAP.items():
+            section_config = config.get(column) or {}
+            if not isinstance(section_config, dict):
+                continue
+            for key in _AUTOMATION_ALLOWED_KEYS:
+                if key not in section_config:
+                    continue
+                value = section_config[key]
+                settings.set(f"{section}.{key.upper()}", value)
+    except Exception:
+        # Never break webhook processing if the refresh fails.
+        pass
+
+
+# TTL-cached refresh used by webhook handlers so dashboard changes take effect
+# without requiring a webhook-service restart.
+_last_refresh_at: float = 0.0
+_refresh_lock = threading.Lock()
+
+
+def ensure_postgres_config_loaded(ttl_seconds: float = 30.0) -> None:
+    """Re-apply DB-backed credentials + automation config when TTL expires.
+
+    Call this at the top of each webhook request handler. The first call after
+    process start (or after TTL) reloads everything; subsequent calls are no-ops.
+    """
+    if not os.environ.get("DATABASE_URL"):
+        return
+
+    global _last_refresh_at
+    now = time.monotonic()
+    if now - _last_refresh_at < ttl_seconds:
+        return
+
+    with _refresh_lock:
+        now = time.monotonic()
+        if now - _last_refresh_at < ttl_seconds:
+            return
+        apply_postgres_credentials_to_config()
+        _last_refresh_at = now
+
+
+def invalidate_postgres_config_cache() -> None:
+    """Force the next call to `ensure_postgres_config_loaded` to reload."""
+    global _last_refresh_at
+    _last_refresh_at = 0.0
+
+
+# =============================================================================
+# Knowledge-base config (/learn flag, extraction rules, retrieval tuning).
+#
+# Lives in the `knowledge_base_config` JSON column of the default PRAgentConfig
+# row. The Dashboard writes this; `pr-agent` reads it here and overlays the
+# values on the `KNOWLEDGE_BASE.*` Dynaconf section so runtime code keeps
+# consulting a single source of truth (Dynaconf) even though the edits came
+# from the database.
+# =============================================================================
+
+# Keys we surface through the Dashboard. Anything else in the JSON blob is
+# ignored - we do not blindly forward keys to avoid clobbering infra-level
+# settings such as `chroma_path` or `embedding_model`.
+_KNOWLEDGE_BASE_ALLOWED_KEYS: tuple[str, ...] = (
+    "enabled",
+    "explicit_learn_enabled",
+    "learn_command",
+    "extraction_rules",
+    "apply_to_review",
+    "max_retrieved_learnings",
+    "max_summary_chars",
+    "duplicate_threshold",
+    "capture_from_pr_comments",
+    "require_agent_mention",
+)
+
+
+def _fetch_knowledge_base_config() -> Optional[dict[str, Any]]:
+    """Return the knowledge-base JSON dict from the default PRAgentConfig row.
+
+    Returns ``None`` when DB is not configured, engine is not initialised, or
+    no default config row exists. Returns an empty dict when the row exists
+    but the column is NULL (meaning "use TOML defaults").
+    """
+    provider = get_postgres_credential_provider()
+    provider._init_db()
+    if not provider._initialized or not provider._engine:
+        return None
+
+    try:
+        from sqlmodel import Session, select
+
+        from pr_agent.db.models import PRAgentConfig
+
+        with Session(provider._engine) as session:
+            statement = (
+                select(PRAgentConfig)
+                .where(PRAgentConfig.is_default == True)  # noqa: E712
+                .limit(1)
+            )
+            config = session.exec(statement).first()
+            if not config:
+                return None
+            return dict(config.knowledge_base_config or {})
+    except Exception:
+        return None
+
+
+def apply_knowledge_base_config_to_settings() -> None:
+    """Overlay DB-stored knowledge-base config onto Dynaconf's KNOWLEDGE_BASE.*
+
+    Only the allow-listed keys are written. Values that fail type coercion are
+    dropped silently so a malformed row never crashes webhook processing.
+    """
+    if not os.environ.get("DATABASE_URL"):
+        return
+
+    kb_config = _fetch_knowledge_base_config()
+    if kb_config is None:
+        return
+
+    try:
+        from pr_agent.config_loader import get_settings
+
+        settings = get_settings()
+        for key in _KNOWLEDGE_BASE_ALLOWED_KEYS:
+            if key not in kb_config:
+                continue
+            value = kb_config[key]
+            # Coerce list-ish values for extraction_rules so we never push a
+            # non-iterable into Dynaconf (defensive; the API validates too).
+            if key == "extraction_rules":
+                if value is None:
+                    value = []
+                elif not isinstance(value, (list, tuple)):
+                    continue
+                value = [str(v) for v in value if isinstance(v, str)]
+            settings.set(f"KNOWLEDGE_BASE.{key.upper()}", value)
+    except Exception:
         pass

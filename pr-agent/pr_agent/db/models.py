@@ -408,6 +408,11 @@ class PRAgentConfig(SQLModel, table=True):
     extended_thinking_budget_tokens: int = Field(default=2048)
     extended_thinking_max_output_tokens: int = Field(default=4096)
 
+    # Automation master switch. When True, PR-Agent does not run any
+    # automatic tools on PR/push events across any git provider. Manual
+    # slash-command triggers still work.
+    disable_auto_feedback: bool = Field(default=False)
+
     # Tool-specific configurations stored as JSON
     pr_reviewer_config: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
     pr_description_config: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
@@ -435,6 +440,9 @@ class PRAgentConfig(SQLModel, table=True):
     auto_best_practices_config: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
     similar_issue_config: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
     litellm_config: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+    # Knowledge base: `/learn`, extraction rules, retrieval tuning. Surface
+    # through the Dashboard so operators can edit without redeploying.
+    knowledge_base_config: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
 
     # Ignore patterns as JSON arrays
     ignore_pr_title: Optional[list[str]] = Field(default=None, sa_column=Column(JSON))
@@ -486,6 +494,9 @@ class PRAgentConfigCreate(SQLModel):
     extended_thinking_budget_tokens: int = Field(default=2048)
     extended_thinking_max_output_tokens: int = Field(default=4096)
 
+    # Automation master switch (see PRAgentConfig).
+    disable_auto_feedback: bool = Field(default=False)
+
     # Tool-specific configurations
     pr_reviewer_config: Optional[dict[str, Any]] = Field(default=None)
     pr_description_config: Optional[dict[str, Any]] = Field(default=None)
@@ -513,6 +524,7 @@ class PRAgentConfigCreate(SQLModel):
     auto_best_practices_config: Optional[dict[str, Any]] = Field(default=None)
     similar_issue_config: Optional[dict[str, Any]] = Field(default=None)
     litellm_config: Optional[dict[str, Any]] = Field(default=None)
+    knowledge_base_config: Optional[dict[str, Any]] = Field(default=None)
 
     # Ignore patterns
     ignore_pr_title: Optional[list[str]] = Field(default=None)
@@ -551,6 +563,7 @@ class PRAgentConfigUpdate(SQLModel):
     enable_claude_extended_thinking: Optional[bool] = Field(default=None)
     extended_thinking_budget_tokens: Optional[int] = Field(default=None)
     extended_thinking_max_output_tokens: Optional[int] = Field(default=None)
+    disable_auto_feedback: Optional[bool] = Field(default=None)
     pr_reviewer_config: Optional[dict[str, Any]] = Field(default=None)
     pr_description_config: Optional[dict[str, Any]] = Field(default=None)
     pr_questions_config: Optional[dict[str, Any]] = Field(default=None)
@@ -573,6 +586,7 @@ class PRAgentConfigUpdate(SQLModel):
     auto_best_practices_config: Optional[dict[str, Any]] = Field(default=None)
     similar_issue_config: Optional[dict[str, Any]] = Field(default=None)
     litellm_config: Optional[dict[str, Any]] = Field(default=None)
+    knowledge_base_config: Optional[dict[str, Any]] = Field(default=None)
     ignore_pr_title: Optional[list[str]] = Field(default=None)
     ignore_pr_target_branches: Optional[list[str]] = Field(default=None)
     ignore_pr_source_branches: Optional[list[str]] = Field(default=None)
@@ -604,6 +618,7 @@ class PRAgentConfigPublic(SQLModel):
     temperature: float
     reasoning_effort: str
     enable_claude_extended_thinking: bool
+    disable_auto_feedback: bool
     pr_reviewer_config: Optional[dict[str, Any]]
     pr_description_config: Optional[dict[str, Any]]
     pr_questions_config: Optional[dict[str, Any]]
@@ -618,3 +633,214 @@ class PRAgentConfigPublic(SQLModel):
     ignore_repositories: Optional[list[str]]
     created_at: datetime
     updated_at: datetime
+
+
+# =============================================================================
+# Webhook registration models
+#
+# One row per (git_provider, repo) pairing. Stores the webhook URL + secret +
+# event list we want on the remote git host, plus a cached `external_id` and
+# last-delivery status for quick reference in the Dashboard.
+# =============================================================================
+
+
+class WebhookRegistrationStatus(str, Enum):
+    """Lifecycle state for a webhook registration."""
+    draft = "draft"              # stored locally, not registered with provider
+    registered = "registered"    # provider confirmed creation
+    failed = "failed"            # last register/update attempt errored
+    deleted = "deleted"          # removed from provider (kept locally for audit)
+
+
+class WebhookRegistration(SQLModel, table=True):
+    """Webhook registered on a remote git provider for a specific repository."""
+
+    __tablename__ = "webhook_registrations"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+    # FK to git_providers.id; a webhook always belongs to one credential set.
+    git_provider_id: int = Field(
+        foreign_key="git_providers.id",
+        index=True,
+        description="Git provider credential used to manage this webhook.",
+    )
+
+    repo: str = Field(min_length=1, max_length=500, index=True)
+    target_url: str = Field(min_length=1, max_length=1000)
+
+    # Event list stored as JSON so we don't need a join table for a handful of strings.
+    events: Optional[list[str]] = Field(default=None, sa_column=Column(JSON))
+
+    active: bool = Field(default=True)
+    content_type: str = Field(default="json", max_length=20)
+    insecure_ssl: bool = Field(default=False)
+
+    # Secret sent in X-Hub-Signature / X-Gitlab-Token headers. Stored in plaintext
+    # here for simplicity; mirror your credentials-store encryption strategy.
+    secret: Optional[str] = Field(default=None, max_length=500)
+
+    # Identifier returned by the provider after registration (GitHub: numeric hook id,
+    # GitLab: integer project hook id). Null while status == draft.
+    external_id: Optional[str] = Field(default=None, max_length=255, index=True)
+
+    status: WebhookRegistrationStatus = Field(
+        default=WebhookRegistrationStatus.draft,
+        description="Local bookkeeping state; updated by the register/unregister endpoints.",
+    )
+
+    # Last-delivery bookkeeping fields for quick dashboard display.
+    last_delivery_at: Optional[datetime] = Field(default=None)
+    last_status_code: Optional[int] = Field(default=None)
+    last_error: Optional[str] = Field(default=None, max_length=2000)
+
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class WebhookRegistrationCreate(SQLModel):
+    """Input for creating a new webhook registration row (not yet registered)."""
+    git_provider_id: int
+    repo: str = Field(min_length=1, max_length=500)
+    target_url: str = Field(min_length=1, max_length=1000)
+    events: Optional[list[str]] = Field(default=None)
+    active: bool = True
+    content_type: str = Field(default="json", max_length=20)
+    insecure_ssl: bool = False
+    secret: Optional[str] = Field(
+        default=None,
+        description="Optional secret. If omitted, callers may generate one server-side.",
+    )
+
+
+class WebhookRegistrationUpdate(SQLModel):
+    """Partial update payload. Only provided fields are changed."""
+    repo: Optional[str] = Field(default=None, min_length=1, max_length=500)
+    target_url: Optional[str] = Field(default=None, min_length=1, max_length=1000)
+    events: Optional[list[str]] = Field(default=None)
+    active: Optional[bool] = Field(default=None)
+    content_type: Optional[str] = Field(default=None, max_length=20)
+    insecure_ssl: Optional[bool] = Field(default=None)
+    secret: Optional[str] = Field(default=None)
+
+
+class WebhookRegistrationPublic(SQLModel):
+    """Public-safe API response (excludes the raw secret)."""
+    id: int
+    git_provider_id: int
+    repo: str
+    target_url: str
+    events: list[str]
+    active: bool
+    content_type: str
+    insecure_ssl: bool
+    status: WebhookRegistrationStatus
+    external_id: Optional[str]
+    has_secret: bool
+    last_delivery_at: Optional[datetime]
+    last_status_code: Optional[int]
+    last_error: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+
+
+# =============================================================================
+# PR review activity (audit trail + dashboard metrics)
+#
+# One row per tool invocation (review, improve, describe, ask, ...). Drives the
+# "Reviewed PRs" dashboard card and is the long-term audit log for PR-Agent
+# traffic. We intentionally keep this table append-only: no updates, no soft
+# deletes — the refinement worker, auto-review dispatcher, webhook handler
+# and CLI can all insert into it without coordination.
+# =============================================================================
+
+
+class PRReviewTriggeredBy(str, Enum):
+    """Who/what caused the tool to run."""
+    manual = "manual"      # slash-command on a PR comment
+    automatic = "automatic"  # pr_commands on opened/synchronize etc.
+    cli = "cli"            # run locally via `pr-agent` CLI
+    unknown = "unknown"
+
+
+class PRReviewActivity(SQLModel, table=True):
+    """Audit record for a single PR-Agent tool invocation on a PR.
+
+    Summed / grouped-by to produce the "Reviewed PRs" card, and will later
+    back a per-repo activity view. ``pr_number`` + ``repo`` are the natural
+    key used when counting unique PRs; we don't enforce uniqueness at the
+    row level because repeated invocations on the same PR are legitimate and
+    useful history.
+    """
+    __tablename__ = "pr_review_activities"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+    # Lowercased provider type (github / gitlab / ...). Kept as a free-form
+    # string rather than the enum so we don't have to migrate this table
+    # when new providers appear.
+    provider_type: Optional[str] = Field(default=None, max_length=50, index=True)
+
+    # `owner/repo` style name. Nullable because some tools (e.g. CLI with
+    # an arbitrary URL) can't always resolve it up-front.
+    repo: Optional[str] = Field(default=None, max_length=500, index=True)
+
+    pr_number: Optional[int] = Field(default=None, index=True)
+    pr_url: Optional[str] = Field(default=None, max_length=1000)
+
+    # Canonical tool name (normalised to the `command2class` key:
+    # review/auto_review/describe/improve/ask/learn/...).
+    tool: str = Field(min_length=1, max_length=64, index=True)
+
+    triggered_by: PRReviewTriggeredBy = Field(
+        default=PRReviewTriggeredBy.unknown,
+        description="Whether the invocation came from a manual slash-command, automatic rule, or CLI.",
+    )
+
+    # True when the tool finished without raising. Failed invocations are
+    # still recorded so operators can see error-rate in the dashboard.
+    success: bool = Field(default=True)
+    duration_ms: Optional[int] = Field(default=None)
+
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        index=True,
+    )
+
+
+class PRReviewActivityPublic(SQLModel):
+    """Serialisation shape for the API."""
+    id: int
+    provider_type: Optional[str]
+    repo: Optional[str]
+    pr_number: Optional[int]
+    pr_url: Optional[str]
+    tool: str
+    triggered_by: PRReviewTriggeredBy
+    success: bool
+    duration_ms: Optional[int]
+    created_at: datetime
+
+
+class PRReviewActivityStats(SQLModel):
+    """Aggregated counters surfaced by /api/pr-review-activities/stats."""
+    total_invocations: int = 0
+    successful_invocations: int = 0
+    unique_prs: int = 0
+    unique_repos: int = 0
+    review_tools_unique_prs: int = 0
+    by_tool: dict[str, int] = Field(default_factory=dict)
+    by_trigger: dict[str, int] = Field(default_factory=dict)
+
+
+class WebhookDelivery(SQLModel):
+    """Transient delivery record returned by provider APIs (not persisted)."""
+    id: str
+    delivered_at: Optional[datetime] = None
+    status: Optional[str] = None
+    status_code: Optional[int] = None
+    event: Optional[str] = None
+    action: Optional[str] = None
+    duration_ms: Optional[float] = None
+    redelivery: bool = False
+    url: Optional[str] = None
