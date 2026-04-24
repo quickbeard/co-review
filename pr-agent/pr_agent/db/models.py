@@ -636,6 +636,73 @@ class PRAgentConfigPublic(SQLModel):
 
 
 # =============================================================================
+# DevLake integration models
+# =============================================================================
+
+
+class DevLakeIntegration(SQLModel, table=True):
+    """Mapping between an internal git provider and DevLake resources."""
+
+    __tablename__ = "devlake_integrations"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+    git_provider_id: int = Field(
+        foreign_key="git_providers.id",
+        index=True,
+        unique=True,
+        description="Owning git provider id",
+    )
+
+    enabled: bool = Field(default=False)
+    plugin_name: Optional[str] = Field(default=None, max_length=50)
+
+    connection_id: Optional[int] = Field(default=None)
+    blueprint_id: Optional[int] = Field(default=None)
+    project_name: Optional[str] = Field(default=None, max_length=255)
+    selected_scopes: Optional[list[dict[str, Any]]] = Field(
+        default=None,
+        sa_column=Column(JSON),
+        description="Canonical list of selected DevLake scopes (id/name/fullName)",
+    )
+
+    last_pipeline_id: Optional[int] = Field(default=None)
+    last_sync_status: Optional[str] = Field(default=None, max_length=50)
+    last_sync_error: Optional[str] = Field(default=None, max_length=2000)
+    last_synced_at: Optional[datetime] = Field(default=None)
+
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class DevLakeIntegrationUpdate(SQLModel):
+    """Payload for creating/updating DevLake integration settings."""
+
+    enabled: Optional[bool] = Field(default=None)
+    project_name: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    selected_scopes: Optional[list[dict[str, Any]]] = Field(default=None)
+
+
+class DevLakeIntegrationPublic(SQLModel):
+    """Public API response for DevLake integration metadata."""
+
+    id: int
+    git_provider_id: int
+    enabled: bool
+    plugin_name: Optional[str]
+    connection_id: Optional[int]
+    blueprint_id: Optional[int]
+    project_name: Optional[str]
+    selected_scopes: list[dict[str, Any]] = Field(default_factory=list)
+    last_pipeline_id: Optional[int]
+    last_sync_status: Optional[str]
+    last_sync_error: Optional[str]
+    last_synced_at: Optional[datetime]
+    created_at: datetime
+    updated_at: datetime
+
+
+# =============================================================================
 # Webhook registration models
 #
 # One row per (git_provider, repo) pairing. Stores the webhook URL + secret +

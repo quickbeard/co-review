@@ -16,6 +16,9 @@ from pydantic import BaseModel
 from sqlmodel import Session, select
 
 from pr_agent.db import (
+    DevLakeIntegration,
+    DevLakeIntegrationPublic,
+    DevLakeIntegrationUpdate,
     GitProvider,
     GitProviderCreate,
     GitProviderPublic,
@@ -39,6 +42,7 @@ from pr_agent.db import (
     init_database,
 )
 from pr_agent.services import pr_review_activity as review_activity_service
+from pr_agent.services import devlake as devlake_service
 from pr_agent.memory_providers import get_memory_provider
 from pr_agent.memory_providers.base import LearningRecord
 
@@ -225,6 +229,217 @@ def delete_provider(
 
     get_logger().info(f"Deleted git provider: {provider_name} (id={provider_id})")
     return {"status": "deleted", "id": str(provider_id)}
+
+
+# =============================================================================
+# DevLake integration (backend-only, UI wiring follows in a separate PR)
+# =============================================================================
+
+
+class DevLakeRemoteScopesResponse(BaseModel):
+    scopes: list[dict]
+    count: int
+
+
+class DevLakeSyncRequest(BaseModel):
+    full_sync: bool = False
+    skip_collectors: bool = False
+
+
+class DevLakeSyncResponse(BaseModel):
+    status: str
+    plugin_name: str
+    connection_id: int
+    blueprint_id: int
+    pipeline_id: int | None = None
+
+
+def _get_devlake_provider_or_404(session: Session, provider_id: int) -> GitProvider:
+    provider = session.get(GitProvider, provider_id)
+    if not provider:
+        raise HTTPException(status_code=404, detail="Provider not found")
+    return provider
+
+
+def _integration_to_public(row: DevLakeIntegration) -> DevLakeIntegrationPublic:
+    return DevLakeIntegrationPublic(
+        id=row.id,  # type: ignore[arg-type]
+        git_provider_id=row.git_provider_id,
+        enabled=row.enabled,
+        plugin_name=row.plugin_name,
+        connection_id=row.connection_id,
+        blueprint_id=row.blueprint_id,
+        project_name=row.project_name,
+        selected_scopes=list(row.selected_scopes or []),
+        last_pipeline_id=row.last_pipeline_id,
+        last_sync_status=row.last_sync_status,
+        last_sync_error=row.last_sync_error,
+        last_synced_at=row.last_synced_at,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
+
+
+def _get_or_create_integration(session: Session, provider_id: int) -> DevLakeIntegration:
+    statement = select(DevLakeIntegration).where(DevLakeIntegration.git_provider_id == provider_id)
+    row = session.exec(statement).first()
+    if row:
+        return row
+    row = DevLakeIntegration(git_provider_id=provider_id)
+    session.add(row)
+    session.commit()
+    session.refresh(row)
+    return row
+
+
+@app.get(
+    "/api/git-providers/{provider_id}/devlake",
+    response_model=DevLakeIntegrationPublic,
+)
+def get_devlake_integration(
+    provider_id: int,
+    session: SessionDep,
+) -> DevLakeIntegrationPublic:
+    _get_devlake_provider_or_404(session, provider_id)
+    row = _get_or_create_integration(session, provider_id)
+    return _integration_to_public(row)
+
+
+@app.put(
+    "/api/git-providers/{provider_id}/devlake",
+    response_model=DevLakeIntegrationPublic,
+)
+def upsert_devlake_integration(
+    provider_id: int,
+    payload: DevLakeIntegrationUpdate,
+    session: SessionDep,
+) -> DevLakeIntegrationPublic:
+    provider = _get_devlake_provider_or_404(session, provider_id)
+    row = _get_or_create_integration(session, provider_id)
+
+    data = payload.model_dump(exclude_unset=True)
+    for key, value in data.items():
+        setattr(row, key, value)
+
+    row.plugin_name = devlake_service.map_provider_to_plugin(provider)
+    row.updated_at = datetime.now(timezone.utc)
+    session.add(row)
+    session.commit()
+    session.refresh(row)
+    return _integration_to_public(row)
+
+
+@app.get(
+    "/api/git-providers/{provider_id}/devlake/remote-scopes",
+    response_model=DevLakeRemoteScopesResponse,
+)
+def list_devlake_remote_scopes(
+    provider_id: int,
+    session: SessionDep,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=500)] = 100,
+    search_term: str | None = None,
+) -> DevLakeRemoteScopesResponse:
+    provider = _get_devlake_provider_or_404(session, provider_id)
+    row = _get_or_create_integration(session, provider_id)
+    if not row.connection_id:
+        raise HTTPException(
+            status_code=400,
+            detail="No DevLake connection exists yet; run /devlake/sync first",
+        )
+
+    plugin_name = devlake_service.map_provider_to_plugin(provider)
+    client = devlake_service.DevLakeClient(devlake_service.load_settings())
+    raw = client.list_remote_scopes(
+        plugin_name,
+        row.connection_id,
+        page=page,
+        page_size=page_size,
+        search_term=search_term,
+    )
+
+    scopes = []
+    children = raw.get("children") or raw.get("scopes") or []
+    if isinstance(children, list):
+        for item in children:
+            if isinstance(item, dict):
+                scopes.append(item)
+
+    count = raw.get("count")
+    if not isinstance(count, int):
+        count = len(scopes)
+
+    return DevLakeRemoteScopesResponse(scopes=scopes, count=count)
+
+
+@app.post(
+    "/api/git-providers/{provider_id}/devlake/sync",
+    response_model=DevLakeSyncResponse,
+)
+def sync_git_provider_to_devlake(
+    provider_id: int,
+    payload: DevLakeSyncRequest,
+    session: SessionDep,
+) -> DevLakeSyncResponse:
+    provider = _get_devlake_provider_or_404(session, provider_id)
+    integration = _get_or_create_integration(session, provider_id)
+    plugin_name = devlake_service.map_provider_to_plugin(provider)
+
+    settings = devlake_service.load_settings()
+    client = devlake_service.DevLakeClient(settings)
+
+    if not integration.connection_id:
+        conn_payload = devlake_service.build_connection_payload(provider, plugin_name)
+        conn = client.create_connection(plugin_name, conn_payload)
+        conn_id = conn.get("id")
+        if not isinstance(conn_id, int):
+            raise HTTPException(status_code=502, detail=f"Unexpected DevLake connection payload: {conn}")
+        integration.connection_id = conn_id
+
+    selected_scopes = list(integration.selected_scopes or [])
+    if selected_scopes:
+        client.put_scopes(plugin_name, integration.connection_id, selected_scopes)  # type: ignore[arg-type]
+
+    if not integration.project_name:
+        integration.project_name = f"{provider.type.value}-{provider.id}"
+
+    blueprint_payload = devlake_service.build_blueprint_payload(
+        integration=integration,
+        plugin_name=plugin_name,
+    )
+
+    if integration.blueprint_id:
+        bp = client.patch_blueprint(integration.blueprint_id, blueprint_payload)
+    else:
+        bp = client.create_blueprint(blueprint_payload)
+        bp_id = bp.get("id")
+        if not isinstance(bp_id, int):
+            raise HTTPException(status_code=502, detail=f"Unexpected DevLake blueprint payload: {bp}")
+        integration.blueprint_id = bp_id
+
+    pipeline = client.trigger_blueprint(
+        integration.blueprint_id,  # type: ignore[arg-type]
+        full_sync=payload.full_sync,
+        skip_collectors=payload.skip_collectors,
+    )
+
+    integration.plugin_name = plugin_name
+    integration.last_pipeline_id = pipeline.get("id") if isinstance(pipeline.get("id"), int) else None
+    integration.last_sync_status = "triggered"
+    integration.last_sync_error = None
+    integration.last_synced_at = datetime.now(timezone.utc)
+    integration.updated_at = datetime.now(timezone.utc)
+    session.add(integration)
+    session.commit()
+    session.refresh(integration)
+
+    return DevLakeSyncResponse(
+        status="triggered",
+        plugin_name=plugin_name,
+        connection_id=integration.connection_id,  # type: ignore[arg-type]
+        blueprint_id=integration.blueprint_id,  # type: ignore[arg-type]
+        pipeline_id=integration.last_pipeline_id,
+    )
 
 
 # =============================================================================
