@@ -209,6 +209,19 @@ num_retrieved_snippets=5
 
 [pr_config] # /config #
 
+[knowledge_base]
+enabled = false
+provider = "mem0"
+scope = "local"
+capture_from_pr_comments = true
+apply_to_review = true
+require_agent_mention = true
+max_retrieved_learnings = 5
+max_summary_chars = 1200
+chroma_path = "./.mem0/chroma"
+collection_name = "pr_agent_repo_learnings"
+embedding_model = "text-embedding-3-small"
+
 [pr_help_docs]
 repo_url = "" #If not overwritten, will use the repo from where the context came from (issue or PR)
 repo_default_branch = "main"
