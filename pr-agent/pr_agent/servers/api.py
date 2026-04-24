@@ -27,6 +27,8 @@ from pr_agent.db import (
     LLMProviderUpdate,
     LLMProviderType,
     PRAgentConfig,
+    PRReviewActivityPublic,
+    PRReviewActivityStats,
     WebhookDelivery,
     WebhookRegistration,
     WebhookRegistrationCreate,
@@ -36,6 +38,7 @@ from pr_agent.db import (
     get_session,
     init_database,
 )
+from pr_agent.services import pr_review_activity as review_activity_service
 from pr_agent.memory_providers import get_memory_provider
 from pr_agent.memory_providers.base import LearningRecord
 
@@ -592,6 +595,11 @@ def list_learnings(
 
     try:
         records = provider.list_all_learnings(repo_full_name=repo, limit=limit)
+        # `total` must reflect the full population, not just the page the UI
+        # asked for, otherwise homepage counters that pass a tiny limit will
+        # under-report (see regression where homepage showed 1 vs. /learnings
+        # showing 11).
+        total = provider.count_learnings(repo_full_name=repo)
         repos = provider.list_repos()
     except Exception as e:  # defensive: never crash the endpoint
         get_logger().warning(f"Failed to load learnings: {e}")
@@ -599,7 +607,7 @@ def list_learnings(
 
     return LearningsListResponse(
         enabled=True,
-        total=len(records),
+        total=total,
         items=[_record_to_public(r) for r in records],
         repos=repos,
     )
@@ -626,6 +634,56 @@ def delete_learning(learning_id: str) -> dict[str, str]:
 
     get_logger().info(f"Deleted learning {learning_id}")
     return {"status": "deleted", "id": learning_id}
+
+
+# =============================================================================
+# PR review activity API
+#
+# Reads the append-only audit log populated by `PRAgent._handle_request`.
+# The `stats` endpoint powers the dashboard's "Reviewed PRs" card; the list
+# endpoint is intended for a future activity drawer / per-repo view.
+# =============================================================================
+
+
+class PRReviewActivityListResponse(BaseModel):
+    total: int
+    items: list[PRReviewActivityPublic]
+
+
+@app.get("/api/pr-review-activities/stats", response_model=PRReviewActivityStats)
+def pr_review_activity_stats(
+    repo: Annotated[str | None, Query(description="Restrict counters to a single repo (owner/repo)")] = None,
+) -> PRReviewActivityStats:
+    """Aggregated counters across the PR review audit log."""
+    return review_activity_service.get_stats(repo=repo)
+
+
+@app.get("/api/pr-review-activities", response_model=PRReviewActivityListResponse)
+def list_pr_review_activities(
+    repo: Annotated[str | None, Query(description="Filter by repo (owner/repo)")] = None,
+    tool: Annotated[str | None, Query(description="Filter by canonical tool name (review, improve, ...)")] = None,
+    limit: Annotated[int, Query(ge=1, le=500)] = 100,
+) -> PRReviewActivityListResponse:
+    """Return the newest activity rows matching the filters."""
+    rows = review_activity_service.list_activities(repo=repo, tool=tool, limit=limit)
+    return PRReviewActivityListResponse(
+        total=len(rows),
+        items=[
+            PRReviewActivityPublic(
+                id=r.id,  # type: ignore[arg-type]
+                provider_type=r.provider_type,
+                repo=r.repo,
+                pr_number=r.pr_number,
+                pr_url=r.pr_url,
+                tool=r.tool,
+                triggered_by=r.triggered_by,
+                success=r.success,
+                duration_ms=r.duration_ms,
+                created_at=r.created_at,
+            )
+            for r in rows
+        ],
+    )
 
 
 # =============================================================================

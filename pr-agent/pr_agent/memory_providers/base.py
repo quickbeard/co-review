@@ -43,6 +43,15 @@ class MemoryProvider(Protocol):
     ) -> list[LearningRecord]:
         ...
 
+    def count_learnings(self, repo_full_name: str | None = None) -> int:
+        """Return the total number of stored learnings (unbounded by limit).
+
+        Used for dashboard counters where we want the true population size,
+        not the page that was returned by a limited ``list_all_learnings``
+        call.
+        """
+        ...
+
     def delete_learning(self, learning_id: str) -> bool:
         ...
 

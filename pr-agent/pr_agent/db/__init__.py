@@ -34,6 +34,11 @@ from .models import (
     WebhookRegistrationPublic,
     WebhookRegistrationStatus,
     WebhookRegistrationUpdate,
+    # PR review activity / audit
+    PRReviewActivity,
+    PRReviewActivityPublic,
+    PRReviewActivityStats,
+    PRReviewTriggeredBy,
 )
 
 __all__ = [
@@ -76,4 +81,9 @@ __all__ = [
     "WebhookRegistrationPublic",
     "WebhookRegistrationStatus",
     "WebhookRegistrationUpdate",
+    # PR review activity
+    "PRReviewActivity",
+    "PRReviewActivityPublic",
+    "PRReviewActivityStats",
+    "PRReviewTriggeredBy",
 ]
