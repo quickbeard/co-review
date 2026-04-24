@@ -744,6 +744,95 @@ class WebhookRegistrationPublic(SQLModel):
     updated_at: datetime
 
 
+# =============================================================================
+# PR review activity (audit trail + dashboard metrics)
+#
+# One row per tool invocation (review, improve, describe, ask, ...). Drives the
+# "Reviewed PRs" dashboard card and is the long-term audit log for PR-Agent
+# traffic. We intentionally keep this table append-only: no updates, no soft
+# deletes — the refinement worker, auto-review dispatcher, webhook handler
+# and CLI can all insert into it without coordination.
+# =============================================================================
+
+
+class PRReviewTriggeredBy(str, Enum):
+    """Who/what caused the tool to run."""
+    manual = "manual"      # slash-command on a PR comment
+    automatic = "automatic"  # pr_commands on opened/synchronize etc.
+    cli = "cli"            # run locally via `pr-agent` CLI
+    unknown = "unknown"
+
+
+class PRReviewActivity(SQLModel, table=True):
+    """Audit record for a single PR-Agent tool invocation on a PR.
+
+    Summed / grouped-by to produce the "Reviewed PRs" card, and will later
+    back a per-repo activity view. ``pr_number`` + ``repo`` are the natural
+    key used when counting unique PRs; we don't enforce uniqueness at the
+    row level because repeated invocations on the same PR are legitimate and
+    useful history.
+    """
+    __tablename__ = "pr_review_activities"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+
+    # Lowercased provider type (github / gitlab / ...). Kept as a free-form
+    # string rather than the enum so we don't have to migrate this table
+    # when new providers appear.
+    provider_type: Optional[str] = Field(default=None, max_length=50, index=True)
+
+    # `owner/repo` style name. Nullable because some tools (e.g. CLI with
+    # an arbitrary URL) can't always resolve it up-front.
+    repo: Optional[str] = Field(default=None, max_length=500, index=True)
+
+    pr_number: Optional[int] = Field(default=None, index=True)
+    pr_url: Optional[str] = Field(default=None, max_length=1000)
+
+    # Canonical tool name (normalised to the `command2class` key:
+    # review/auto_review/describe/improve/ask/learn/...).
+    tool: str = Field(min_length=1, max_length=64, index=True)
+
+    triggered_by: PRReviewTriggeredBy = Field(
+        default=PRReviewTriggeredBy.unknown,
+        description="Whether the invocation came from a manual slash-command, automatic rule, or CLI.",
+    )
+
+    # True when the tool finished without raising. Failed invocations are
+    # still recorded so operators can see error-rate in the dashboard.
+    success: bool = Field(default=True)
+    duration_ms: Optional[int] = Field(default=None)
+
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        index=True,
+    )
+
+
+class PRReviewActivityPublic(SQLModel):
+    """Serialisation shape for the API."""
+    id: int
+    provider_type: Optional[str]
+    repo: Optional[str]
+    pr_number: Optional[int]
+    pr_url: Optional[str]
+    tool: str
+    triggered_by: PRReviewTriggeredBy
+    success: bool
+    duration_ms: Optional[int]
+    created_at: datetime
+
+
+class PRReviewActivityStats(SQLModel):
+    """Aggregated counters surfaced by /api/pr-review-activities/stats."""
+    total_invocations: int = 0
+    successful_invocations: int = 0
+    unique_prs: int = 0
+    unique_repos: int = 0
+    review_tools_unique_prs: int = 0
+    by_tool: dict[str, int] = Field(default_factory=dict)
+    by_trigger: dict[str, int] = Field(default_factory=dict)
+
+
 class WebhookDelivery(SQLModel):
     """Transient delivery record returned by provider APIs (not persisted)."""
     id: str

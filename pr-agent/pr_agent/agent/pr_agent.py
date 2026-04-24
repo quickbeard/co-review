@@ -1,4 +1,5 @@
 import shlex
+import time
 from functools import partial
 
 from pr_agent.algo.ai_handlers.base_ai_handler import BaseAiHandler
@@ -6,8 +7,10 @@ from pr_agent.algo.ai_handlers.litellm_ai_handler import LiteLLMAIHandler
 from pr_agent.algo.cli_args import CliArgs
 from pr_agent.algo.utils import update_settings_from_args
 from pr_agent.config_loader import get_settings
+from pr_agent.db.models import PRReviewTriggeredBy
 from pr_agent.git_providers.utils import apply_repo_settings
 from pr_agent.log import get_logger
+from pr_agent.services.pr_review_activity import record_activity
 from pr_agent.tools.pr_add_docs import PRAddDocs
 from pr_agent.tools.pr_code_suggestions import PRCodeSuggestions
 from pr_agent.tools.pr_config import PRConfig
@@ -103,22 +106,55 @@ class PRAgent:
         if action not in command2class:
             get_logger().warning(f"Unknown command: {action}")
             return False
+        # Classify the source so dashboard aggregates can distinguish
+        # "someone commented `/review`" from "webhook auto-ran on PR open":
+        #   - ``auto_review`` is always automatic
+        #   - ``config.is_auto_command`` is set by the webhook's auto-dispatch
+        #     helper (see github_app._perform_auto_commands_github)
+        #   - explicit ``config.triggered_by=cli`` from CLI entrypoints
+        #   - everything else is a human-typed slash command
+        cfg = get_settings().get("config", {}) or {}
+        configured = str(cfg.get("triggered_by") or "").strip().lower()
+        if action == "auto_review" or bool(cfg.get("is_auto_command")):
+            triggered_by = PRReviewTriggeredBy.automatic
+        elif configured in {t.value for t in PRReviewTriggeredBy}:
+            triggered_by = PRReviewTriggeredBy(configured)
+        else:
+            triggered_by = PRReviewTriggeredBy.manual
+
+        started_at = time.monotonic()
+        success = True
         with get_logger().contextualize(command=action, pr_url=pr_url):
             get_logger().info("PR-Agent request handler started", analytics=True)
-            if action == "answer":
-                if notify:
-                    notify()
-                await PRReviewer(pr_url, is_answer=True, args=args, ai_handler=self.ai_handler).run()
-            elif action == "auto_review":
-                await PRReviewer(pr_url, is_auto=True, args=args, ai_handler=self.ai_handler).run()
-            elif action in command2class:
-                if notify:
-                    notify()
+            try:
+                if action == "answer":
+                    if notify:
+                        notify()
+                    await PRReviewer(pr_url, is_answer=True, args=args, ai_handler=self.ai_handler).run()
+                elif action == "auto_review":
+                    await PRReviewer(pr_url, is_auto=True, args=args, ai_handler=self.ai_handler).run()
+                elif action in command2class:
+                    if notify:
+                        notify()
 
-                await command2class[action](pr_url, ai_handler=self.ai_handler, args=args).run()
-            else:
-                return False
-            return True
+                    await command2class[action](pr_url, ai_handler=self.ai_handler, args=args).run()
+                else:
+                    return False
+                return True
+            except Exception:
+                success = False
+                raise
+            finally:
+                duration_ms = int((time.monotonic() - started_at) * 1000)
+                # Best-effort; record_activity swallows its own exceptions so a
+                # DB blip cannot mask the real tool outcome.
+                record_activity(
+                    tool=action,
+                    pr_url=pr_url,
+                    triggered_by=triggered_by,
+                    success=success,
+                    duration_ms=duration_ms,
+                )
 
     async def handle_request(self, pr_url, request, notify=None) -> bool:
         try:

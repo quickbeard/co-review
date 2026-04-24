@@ -461,6 +461,37 @@ class Mem0MemoryProvider:
             )
         return items
 
+    def count_learnings(self, repo_full_name: str | None = None) -> int:
+        """Count learnings without truncating by a display-oriented limit.
+
+        The Chroma collection exposes a cheap ``count()`` for the unscoped
+        case; for a repo filter we fall back to a bounded dump. The cap here
+        (10_000) is deliberately higher than any realistic learning volume
+        but keeps the fallback bounded so a pathological store doesn't hang
+        the dashboard.
+        """
+        if not self._client:
+            return 0
+
+        if repo_full_name is None:
+            vector_store = getattr(self._client, "vector_store", None)
+            count_fn = getattr(vector_store, "count", None) if vector_store else None
+            if callable(count_fn):
+                try:
+                    value = count_fn()
+                    if isinstance(value, (int, float)):
+                        return int(value)
+                except Exception as e:  # fall through to list-and-count path
+                    get_logger().debug(
+                        f"mem0 vector_store.count() failed, falling back to listing: {e}"
+                    )
+
+        # Fallback: list-and-count. Matches the scoped filter precisely when
+        # a repo is given and costs O(all-learnings) I/O otherwise, which is
+        # acceptable for the dashboard homepage refresh frequency.
+        records = self.list_all_learnings(repo_full_name=repo_full_name, limit=10_000)
+        return len(records)
+
     def delete_learning(self, learning_id: str) -> bool:
         if not self._client or not learning_id:
             return False
