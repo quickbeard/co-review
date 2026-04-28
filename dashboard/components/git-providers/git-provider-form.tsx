@@ -64,9 +64,22 @@ export function GitProviderForm({ provider, lang }: GitProviderFormProps) {
   const [showPrivateKey, setShowPrivateKey] = useState(false);
   const [showWebhookSecret, setShowWebhookSecret] = useState(false);
   const [autoSyncOnCreate, setAutoSyncOnCreate] = useState(true);
+  const [autoSyncProjectName, setAutoSyncProjectName] = useState("");
 
   const showBaseUrl = selfHostedProviders.includes(selectedType);
   const isGitHub = selectedType === "github";
+
+  function toFriendlyError(rawError?: string): string {
+    if (!rawError) return "An error occurred";
+    const normalized = rawError.toLowerCase();
+    if (
+      normalized.includes("scope config is duplicated") ||
+      (normalized.includes("duplicated") && normalized.includes("devlake"))
+    ) {
+      return dict.gitProviders.form.autoSyncDuplicateConnectionName;
+    }
+    return rawError;
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -99,11 +112,14 @@ export function GitProviderForm({ provider, lang }: GitProviderFormProps) {
           appId: (formData.get("appId") as string) || undefined,
           privateKey: (formData.get("privateKey") as string) || undefined,
           webhookSecret: (formData.get("webhookSecret") as string) || undefined,
-        }, { autoSyncOnCreate });
+        }, {
+          autoSyncOnCreate,
+          devlakeProjectName: autoSyncOnCreate ? autoSyncProjectName : undefined,
+        });
       }
 
       if (!result.success) {
-        setError(result.error || "An error occurred");
+        setError(toFriendlyError(result.error));
         if (result.fieldErrors) {
           setErrors(result.fieldErrors);
         }
@@ -411,15 +427,33 @@ export function GitProviderForm({ provider, lang }: GitProviderFormProps) {
 
       {/* Form Actions */}
       {!isEdit && (
-        <label className="flex items-center gap-2 text-sm text-muted-foreground">
-          <input
-            type="checkbox"
-            checked={autoSyncOnCreate}
-            onChange={(e) => setAutoSyncOnCreate(e.target.checked)}
-            className="h-4 w-4 rounded border-border text-primary"
-          />
-          {dict.gitProviders.form.autoSyncOnCreate}
-        </label>
+        <div className="space-y-3 rounded-md border border-border p-3">
+          <label className="flex items-center gap-2 text-sm text-muted-foreground">
+            <input
+              type="checkbox"
+              checked={autoSyncOnCreate}
+              onChange={(e) => setAutoSyncOnCreate(e.target.checked)}
+              className="h-4 w-4 rounded border-border text-primary"
+            />
+            {dict.gitProviders.form.autoSyncOnCreate}
+          </label>
+          {autoSyncOnCreate && (
+            <div className="space-y-2">
+              <Label htmlFor="devlake-project-name">
+                {dict.gitProviders.form.autoSyncProjectName}
+              </Label>
+              <Input
+                id="devlake-project-name"
+                value={autoSyncProjectName}
+                onChange={(e) => setAutoSyncProjectName(e.target.value)}
+                placeholder={dict.gitProviders.form.autoSyncProjectNamePlaceholder}
+              />
+              <p className="text-xs text-muted-foreground">
+                {dict.gitProviders.form.autoSyncProjectNameHelp}
+              </p>
+            </div>
+          )}
+        </div>
       )}
 
       <div className="flex gap-3">

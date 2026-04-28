@@ -146,6 +146,11 @@ def create_provider(
         default=False,
         description="If true, attempt DevLake sync right after provider creation",
     ),
+    devlake_project_name: str | None = Query(
+        default=None,
+        min_length=1,
+        description="Optional DevLake project name to use when auto_sync_on_create is true",
+    ),
 ) -> GitProvider:
     """Create a new git provider."""
     # Validate GitHub-specific requirements
@@ -181,6 +186,12 @@ def create_provider(
 
     if auto_sync_on_create:
         integration = _get_or_create_integration(session, provider.id)  # type: ignore[arg-type]
+        integration.enabled = True
+        if devlake_project_name is not None:
+            integration.project_name = devlake_project_name.strip() or None
+        integration.updated_at = datetime.now(timezone.utc)
+        session.add(integration)
+        session.commit()
         try:
             _sync_provider_to_devlake(
                 session=session,
