@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,9 +8,11 @@ import {
   enqueueDevLakeSync,
   getDevLakeIntegration,
   getDevLakeSyncJobStatus,
+  listDevLakeRemoteScopes,
   updateDevLakeIntegration,
   validateDevLakeIntegration,
 } from "@/lib/api/git-providers";
+import type { DevLakeRemoteScope } from "@/lib/api/types";
 import { useDictionary } from "@/lib/i18n/dictionary-context";
 
 interface DevLakeIntegrationPanelProps {
@@ -24,12 +26,30 @@ export function DevLakeIntegrationPanel({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [loadingScopes, setLoadingScopes] = useState(false);
   const [enabled, setEnabled] = useState(false);
   const [projectName, setProjectName] = useState("");
-  const [scopesText, setScopesText] = useState("[]");
+  const [availableScopes, setAvailableScopes] = useState<DevLakeRemoteScope[]>([]);
+  const [selectedScopeIds, setSelectedScopeIds] = useState<Set<string>>(new Set());
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [validateMessage, setValidateMessage] = useState<string | null>(null);
+
+  function toScopeId(scope: Record<string, unknown>): string | null {
+    const raw = scope.scopeId ?? scope.id;
+    if (raw === undefined || raw === null) return null;
+    return String(raw);
+  }
+
+  function toScopePayload(scope: DevLakeRemoteScope): Record<string, unknown> | null {
+    const scopeId = toScopeId(scope as Record<string, unknown>);
+    if (!scopeId) return null;
+    return {
+      scopeId,
+      name: typeof scope.name === "string" ? scope.name : undefined,
+      fullName: typeof scope.fullName === "string" ? scope.fullName : undefined,
+    };
+  }
 
   useEffect(() => {
     let mounted = true;
@@ -43,8 +63,20 @@ export function DevLakeIntegrationPanel({
       }
       setEnabled(result.data.enabled);
       setProjectName(result.data.projectName || "");
-      setScopesText(JSON.stringify(result.data.selectedScopes || [], null, 2));
+      const preselected = new Set<string>();
+      for (const scope of result.data.selectedScopes || []) {
+        const scopeId = toScopeId(scope);
+        if (scopeId) preselected.add(scopeId);
+      }
+      setSelectedScopeIds(preselected);
       setStatus(result.data.lastSyncStatus);
+      setLoadingScopes(true);
+      const scopesResult = await listDevLakeRemoteScopes(providerId);
+      if (!mounted) return;
+      if (scopesResult.success && scopesResult.data) {
+        setAvailableScopes(scopesResult.data.scopes || []);
+      }
+      setLoadingScopes(false);
       setLoading(false);
     })();
     return () => {
@@ -52,28 +84,27 @@ export function DevLakeIntegrationPanel({
     };
   }, [providerId]);
 
-  const parsedScopes = useMemo(() => {
-    try {
-      const parsed = JSON.parse(scopesText);
-      if (!Array.isArray(parsed)) return null;
-      return parsed;
-    } catch {
-      return null;
-    }
-  }, [scopesText]);
-
   async function handleSave() {
     setError(null);
     setValidateMessage(null);
-    if (!parsedScopes) {
-      setError(dict.gitProviders.devlake.invalidScopesJson);
-      return;
+    const selectedScopesPayload = availableScopes
+      .filter((scope) => {
+        const scopeId = toScopeId(scope as Record<string, unknown>);
+        return scopeId ? selectedScopeIds.has(scopeId) : false;
+      })
+      .map(toScopePayload)
+      .filter((scope): scope is Record<string, unknown> => scope !== null);
+
+    for (const scopeId of selectedScopeIds) {
+      if (selectedScopesPayload.some((scope) => String(scope.scopeId) === scopeId)) continue;
+      selectedScopesPayload.push({ scopeId });
     }
+
     setSaving(true);
     const result = await updateDevLakeIntegration(providerId, {
       enabled,
       projectName: projectName || undefined,
-      selectedScopes: parsedScopes,
+      selectedScopes: selectedScopesPayload,
     });
     setSaving(false);
     if (!result.success || !result.data) {
@@ -177,13 +208,42 @@ export function DevLakeIntegrationPanel({
 
       <div className="space-y-2">
         <Label htmlFor="devlake-scopes">{dict.gitProviders.devlake.scopes}</Label>
-        <textarea
+        <div
           id="devlake-scopes"
-          value={scopesText}
-          onChange={(e) => setScopesText(e.target.value)}
-          className="min-h-36 w-full rounded-md border border-border bg-background px-3 py-2 font-mono text-xs text-foreground"
-          placeholder='[{"scopeId":"123","name":"org/repo","fullName":"org/repo"}]'
-        />
+          className="max-h-64 space-y-2 overflow-auto rounded-md border border-border bg-background px-3 py-2 text-sm"
+        >
+          {loadingScopes && (
+            <p className="text-muted-foreground">{dict.gitProviders.devlake.loadingScopes}</p>
+          )}
+          {!loadingScopes && availableScopes.length === 0 && (
+            <p className="text-muted-foreground">{dict.gitProviders.devlake.noScopes}</p>
+          )}
+          {!loadingScopes &&
+            availableScopes.map((scope) => {
+              const scopeId = toScopeId(scope as Record<string, unknown>);
+              if (!scopeId) return null;
+              const label =
+                (typeof scope.fullName === "string" && scope.fullName) ||
+                (typeof scope.name === "string" && scope.name) ||
+                scopeId;
+              return (
+                <label key={scopeId} className="flex items-center gap-2 text-foreground">
+                  <input
+                    type="checkbox"
+                    checked={selectedScopeIds.has(scopeId)}
+                    onChange={(e) => {
+                      const next = new Set(selectedScopeIds);
+                      if (e.target.checked) next.add(scopeId);
+                      else next.delete(scopeId);
+                      setSelectedScopeIds(next);
+                    }}
+                    className="h-4 w-4 rounded border-border text-primary"
+                  />
+                  <span>{label}</span>
+                </label>
+              );
+            })}
+        </div>
       </div>
 
       {status && (
