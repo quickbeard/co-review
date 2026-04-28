@@ -5,12 +5,14 @@ Provides CRUD endpoints for git provider management.
 """
 
 import os
+import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
+from threading import Lock
 from typing import Annotated, Any
 
 import uvicorn
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import BackgroundTasks, Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlmodel import Session, select
@@ -38,6 +40,7 @@ from pr_agent.db import (
     WebhookRegistrationPublic,
     WebhookRegistrationStatus,
     WebhookRegistrationUpdate,
+    engine,
     get_session,
     init_database,
 )
@@ -275,12 +278,50 @@ class DevLakeSyncRequest(BaseModel):
     skip_collectors: bool = False
 
 
+class DevLakeSyncAcceptedResponse(BaseModel):
+    job_id: str
+    status: str
+
+
 class DevLakeSyncResponse(BaseModel):
     status: str
     plugin_name: str
     connection_id: int
     blueprint_id: int
     pipeline_id: int | None = None
+
+
+class DevLakeSyncJobStatusResponse(BaseModel):
+    job_id: str
+    status: str
+    provider_id: int
+    started_at: str
+    finished_at: str | None = None
+    result: DevLakeSyncResponse | None = None
+    error: str | None = None
+
+
+class DevLakeValidationResponse(BaseModel):
+    success: bool
+    plugin_name: str
+    connection_id: int
+    remote_scope_count: int
+    message: str
+
+
+_devlake_sync_jobs: dict[str, dict[str, Any]] = {}
+_devlake_sync_jobs_lock = Lock()
+
+
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _set_sync_job_state(job_id: str, **updates: Any) -> None:
+    with _devlake_sync_jobs_lock:
+        existing = _devlake_sync_jobs.get(job_id, {})
+        existing.update(updates)
+        _devlake_sync_jobs[job_id] = existing
 
 
 def _get_devlake_provider_or_404(session: Session, provider_id: int) -> GitProvider:
@@ -400,6 +441,55 @@ def _sync_provider_to_devlake(
     )
 
 
+def _run_devlake_sync_job(
+    *,
+    job_id: str,
+    provider_id: int,
+    full_sync: bool,
+    skip_collectors: bool,
+) -> None:
+    _set_sync_job_state(job_id, status="running")
+    with Session(engine) as session:
+        try:
+            provider = _get_devlake_provider_or_404(session, provider_id)
+            integration = _get_or_create_integration(session, provider_id)
+            result = _sync_provider_to_devlake(
+                session=session,
+                provider=provider,
+                integration=integration,
+                full_sync=full_sync,
+                skip_collectors=skip_collectors,
+            )
+            _set_sync_job_state(
+                job_id,
+                status="succeeded",
+                finished_at=_now_iso(),
+                result=result.model_dump(),
+                error=None,
+            )
+        except Exception as exc:  # noqa: BLE001
+            # Best-effort persistence for visibility/retry UX.
+            try:
+                provider = session.get(GitProvider, provider_id)
+                if provider:
+                    integration = _get_or_create_integration(session, provider_id)
+                    integration.last_sync_status = "failed"
+                    integration.last_sync_error = str(exc)
+                    integration.last_synced_at = datetime.now(timezone.utc)
+                    integration.updated_at = datetime.now(timezone.utc)
+                    session.add(integration)
+                    session.commit()
+            except Exception:
+                pass
+
+            _set_sync_job_state(
+                job_id,
+                status="failed",
+                finished_at=_now_iso(),
+                error=str(exc),
+            )
+
+
 @app.get(
     "/api/git-providers/{provider_id}/devlake",
     response_model=DevLakeIntegrationPublic,
@@ -487,22 +577,106 @@ def list_devlake_remote_scopes(
 
 
 @app.post(
+    "/api/git-providers/{provider_id}/devlake/validate",
+    response_model=DevLakeValidationResponse,
+)
+def validate_devlake_integration(
+    provider_id: int,
+    session: SessionDep,
+) -> DevLakeValidationResponse:
+    """Preflight-check DevLake credentials/connectivity without triggering sync."""
+    provider = _get_devlake_provider_or_404(session, provider_id)
+    row = _get_or_create_integration(session, provider_id)
+    plugin_name, client = _ensure_devlake_connection(
+        provider=provider,
+        integration=row,
+    )
+
+    # Light connectivity probe: one-page remote scope call.
+    raw = client.list_remote_scopes(
+        plugin_name,
+        row.connection_id,  # type: ignore[arg-type]
+        page=1,
+        page_size=1,
+    )
+    children = raw.get("children") or raw.get("scopes") or []
+    scope_count = len(children) if isinstance(children, list) else 0
+
+    row.plugin_name = plugin_name
+    row.updated_at = datetime.now(timezone.utc)
+    session.add(row)
+    session.commit()
+
+    return DevLakeValidationResponse(
+        success=True,
+        plugin_name=plugin_name,
+        connection_id=row.connection_id,  # type: ignore[arg-type]
+        remote_scope_count=scope_count,
+        message="DevLake connection is valid and remote scopes are reachable",
+    )
+
+
+@app.post(
     "/api/git-providers/{provider_id}/devlake/sync",
-    response_model=DevLakeSyncResponse,
+    response_model=DevLakeSyncAcceptedResponse,
 )
 def sync_git_provider_to_devlake(
     provider_id: int,
     payload: DevLakeSyncRequest,
+    background_tasks: BackgroundTasks,
     session: SessionDep,
-) -> DevLakeSyncResponse:
-    provider = _get_devlake_provider_or_404(session, provider_id)
-    integration = _get_or_create_integration(session, provider_id)
-    return _sync_provider_to_devlake(
-        session=session,
-        provider=provider,
-        integration=integration,
+) -> DevLakeSyncAcceptedResponse:
+    # Fast fail for not-found providers before queueing.
+    _get_devlake_provider_or_404(session, provider_id)
+
+    job_id = str(uuid.uuid4())
+    _set_sync_job_state(
+        job_id,
+        job_id=job_id,
+        provider_id=provider_id,
+        status="queued",
+        started_at=_now_iso(),
+        finished_at=None,
+        result=None,
+        error=None,
+    )
+    background_tasks.add_task(
+        _run_devlake_sync_job,
+        job_id=job_id,
+        provider_id=provider_id,
         full_sync=payload.full_sync,
         skip_collectors=payload.skip_collectors,
+    )
+    return DevLakeSyncAcceptedResponse(job_id=job_id, status="queued")
+
+
+@app.get(
+    "/api/git-providers/{provider_id}/devlake/sync-jobs/{job_id}",
+    response_model=DevLakeSyncJobStatusResponse,
+)
+def get_devlake_sync_job_status(
+    provider_id: int,
+    job_id: str,
+    session: SessionDep,
+) -> DevLakeSyncJobStatusResponse:
+    # Keep provider 404 behavior consistent with other DevLake endpoints.
+    _get_devlake_provider_or_404(session, provider_id)
+
+    with _devlake_sync_jobs_lock:
+        record = _devlake_sync_jobs.get(job_id)
+        if not record or record.get("provider_id") != provider_id:
+            raise HTTPException(status_code=404, detail="Sync job not found")
+
+    result_payload = record.get("result")
+    result = DevLakeSyncResponse(**result_payload) if isinstance(result_payload, dict) else None
+    return DevLakeSyncJobStatusResponse(
+        job_id=record["job_id"],
+        status=record["status"],
+        provider_id=record["provider_id"],
+        started_at=record["started_at"],
+        finished_at=record.get("finished_at"),
+        result=result,
+        error=record.get("error"),
     )
 
 
