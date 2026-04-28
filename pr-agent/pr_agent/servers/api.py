@@ -8,7 +8,6 @@ import os
 import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
-from threading import Lock
 from typing import Annotated, Any
 
 import uvicorn
@@ -19,6 +18,7 @@ from sqlmodel import Session, select
 
 from pr_agent.db import (
     DevLakeIntegration,
+    DevLakeSyncJob,
     DevLakeIntegrationPublic,
     DevLakeIntegrationUpdate,
     GitProvider,
@@ -309,19 +309,8 @@ class DevLakeValidationResponse(BaseModel):
     message: str
 
 
-_devlake_sync_jobs: dict[str, dict[str, Any]] = {}
-_devlake_sync_jobs_lock = Lock()
-
-
-def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
-
-
-def _set_sync_job_state(job_id: str, **updates: Any) -> None:
-    with _devlake_sync_jobs_lock:
-        existing = _devlake_sync_jobs.get(job_id, {})
-        existing.update(updates)
-        _devlake_sync_jobs[job_id] = existing
+def _to_iso(value: datetime | None) -> str | None:
+    return value.isoformat() if value else None
 
 
 def _get_devlake_provider_or_404(session: Session, provider_id: int) -> GitProvider:
@@ -359,6 +348,43 @@ def _get_or_create_integration(session: Session, provider_id: int) -> DevLakeInt
     session.add(row)
     session.commit()
     session.refresh(row)
+    return row
+
+
+def _create_sync_job(
+    *,
+    session: Session,
+    provider_id: int,
+    full_sync: bool,
+    skip_collectors: bool,
+) -> DevLakeSyncJob:
+    row = DevLakeSyncJob(
+        job_id=str(uuid.uuid4()),
+        git_provider_id=provider_id,
+        status="queued",
+        full_sync=full_sync,
+        skip_collectors=skip_collectors,
+        started_at=datetime.now(timezone.utc),
+    )
+    session.add(row)
+    session.commit()
+    session.refresh(row)
+    return row
+
+
+def _get_sync_job_or_404(
+    session: Session,
+    *,
+    provider_id: int,
+    job_id: str,
+) -> DevLakeSyncJob:
+    statement = select(DevLakeSyncJob).where(
+        DevLakeSyncJob.job_id == job_id,
+        DevLakeSyncJob.git_provider_id == provider_id,
+    )
+    row = session.exec(statement).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Sync job not found")
     return row
 
 
@@ -448,8 +474,13 @@ def _run_devlake_sync_job(
     full_sync: bool,
     skip_collectors: bool,
 ) -> None:
-    _set_sync_job_state(job_id, status="running")
     with Session(engine) as session:
+        job = _get_sync_job_or_404(session, provider_id=provider_id, job_id=job_id)
+        job.status = "running"
+        job.updated_at = datetime.now(timezone.utc)
+        session.add(job)
+        session.commit()
+
         try:
             provider = _get_devlake_provider_or_404(session, provider_id)
             integration = _get_or_create_integration(session, provider_id)
@@ -460,13 +491,13 @@ def _run_devlake_sync_job(
                 full_sync=full_sync,
                 skip_collectors=skip_collectors,
             )
-            _set_sync_job_state(
-                job_id,
-                status="succeeded",
-                finished_at=_now_iso(),
-                result=result.model_dump(),
-                error=None,
-            )
+            job.status = "succeeded"
+            job.finished_at = datetime.now(timezone.utc)
+            job.result = result.model_dump()
+            job.error = None
+            job.updated_at = datetime.now(timezone.utc)
+            session.add(job)
+            session.commit()
         except Exception as exc:  # noqa: BLE001
             # Best-effort persistence for visibility/retry UX.
             try:
@@ -482,12 +513,12 @@ def _run_devlake_sync_job(
             except Exception:
                 pass
 
-            _set_sync_job_state(
-                job_id,
-                status="failed",
-                finished_at=_now_iso(),
-                error=str(exc),
-            )
+            job.status = "failed"
+            job.finished_at = datetime.now(timezone.utc)
+            job.error = str(exc)
+            job.updated_at = datetime.now(timezone.utc)
+            session.add(job)
+            session.commit()
 
 
 @app.get(
@@ -629,25 +660,20 @@ def sync_git_provider_to_devlake(
     # Fast fail for not-found providers before queueing.
     _get_devlake_provider_or_404(session, provider_id)
 
-    job_id = str(uuid.uuid4())
-    _set_sync_job_state(
-        job_id,
-        job_id=job_id,
-        provider_id=provider_id,
-        status="queued",
-        started_at=_now_iso(),
-        finished_at=None,
-        result=None,
-        error=None,
-    )
-    background_tasks.add_task(
-        _run_devlake_sync_job,
-        job_id=job_id,
+    job = _create_sync_job(
+        session=session,
         provider_id=provider_id,
         full_sync=payload.full_sync,
         skip_collectors=payload.skip_collectors,
     )
-    return DevLakeSyncAcceptedResponse(job_id=job_id, status="queued")
+    background_tasks.add_task(
+        _run_devlake_sync_job,
+        job_id=job.job_id,
+        provider_id=provider_id,
+        full_sync=payload.full_sync,
+        skip_collectors=payload.skip_collectors,
+    )
+    return DevLakeSyncAcceptedResponse(job_id=job.job_id, status=job.status)
 
 
 @app.get(
@@ -662,21 +688,17 @@ def get_devlake_sync_job_status(
     # Keep provider 404 behavior consistent with other DevLake endpoints.
     _get_devlake_provider_or_404(session, provider_id)
 
-    with _devlake_sync_jobs_lock:
-        record = _devlake_sync_jobs.get(job_id)
-        if not record or record.get("provider_id") != provider_id:
-            raise HTTPException(status_code=404, detail="Sync job not found")
-
-    result_payload = record.get("result")
+    row = _get_sync_job_or_404(session, provider_id=provider_id, job_id=job_id)
+    result_payload = row.result
     result = DevLakeSyncResponse(**result_payload) if isinstance(result_payload, dict) else None
     return DevLakeSyncJobStatusResponse(
-        job_id=record["job_id"],
-        status=record["status"],
-        provider_id=record["provider_id"],
-        started_at=record["started_at"],
-        finished_at=record.get("finished_at"),
+        job_id=row.job_id,
+        status=row.status,
+        provider_id=row.git_provider_id,
+        started_at=_to_iso(row.started_at) or "",
+        finished_at=_to_iso(row.finished_at),
         result=result,
-        error=record.get("error"),
+        error=row.error,
     )
 
 
