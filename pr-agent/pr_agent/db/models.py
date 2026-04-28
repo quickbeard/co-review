@@ -702,6 +702,33 @@ class DevLakeIntegrationPublic(SQLModel):
     updated_at: datetime
 
 
+class DevLakeSyncJob(SQLModel, table=True):
+    """Background sync job state for DevLake ingestion orchestration."""
+
+    __tablename__ = "devlake_sync_jobs"
+
+    id: Optional[int] = Field(default=None, primary_key=True)
+    job_id: str = Field(min_length=1, max_length=64, index=True, unique=True)
+    git_provider_id: int = Field(
+        foreign_key="git_providers.id",
+        index=True,
+        description="Owning git provider id",
+    )
+    status: str = Field(default="queued", max_length=20, index=True)
+
+    full_sync: bool = Field(default=False)
+    skip_collectors: bool = Field(default=False)
+
+    started_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), index=True)
+    finished_at: Optional[datetime] = Field(default=None)
+
+    result: Optional[dict[str, Any]] = Field(default=None, sa_column=Column(JSON))
+    error: Optional[str] = Field(default=None, max_length=2000)
+
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
 # =============================================================================
 # Webhook registration models
 #

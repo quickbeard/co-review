@@ -29,6 +29,7 @@ from .models import (
     PRAgentConfigPublic,
     # DevLake integration models
     DevLakeIntegration,
+    DevLakeSyncJob,
     DevLakeIntegrationUpdate,
     DevLakeIntegrationPublic,
     # Webhook registry models (P1)
@@ -80,6 +81,7 @@ __all__ = [
     "PRAgentConfigPublic",
     # DevLake integration
     "DevLakeIntegration",
+    "DevLakeSyncJob",
     "DevLakeIntegrationUpdate",
     "DevLakeIntegrationPublic",
     # Webhook registry
