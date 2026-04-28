@@ -66,6 +66,16 @@ class DevLakeClient:
     def __init__(self, settings: DevLakeSettings):
         self.settings = settings
 
+    @staticmethod
+    def _redact_payload(payload: dict[str, Any] | None) -> dict[str, Any] | None:
+        if payload is None:
+            return None
+        redacted = dict(payload)
+        for key in ("token", "secretKey", "password", "privateKey", "refreshToken"):
+            if key in redacted and redacted[key]:
+                redacted[key] = "***REDACTED***"
+        return redacted
+
     def _build_url(self, path: str, query: dict[str, Any] | None = None) -> str:
         normalized_path = path if path.startswith("/") else f"/{path}"
         prefix = self.settings.api_prefix
@@ -108,9 +118,13 @@ class DevLakeClient:
                 return json.loads(raw.decode("utf-8"))
         except error.HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="ignore")
+            safe_payload = self._redact_payload(payload)
             raise HTTPException(
                 status_code=502,
-                detail=f"DevLake API error ({exc.code}): {detail or exc.reason}",
+                detail=(
+                    f"DevLake API error ({exc.code}) on {method.upper()} {url}: "
+                    f"{detail or exc.reason}. payload={safe_payload}"
+                ),
             ) from exc
         except error.URLError as exc:
             raise HTTPException(
@@ -166,6 +180,14 @@ class DevLakeClient:
         )
 
 
+def _normalize_devlake_rest_endpoint(endpoint: str) -> str:
+    """DevLake RestConnection.GetEndpoint() expects a trailing slash for API roots."""
+    e = endpoint.strip()
+    if not e:
+        return e
+    return e if e.endswith("/") else f"{e}/"
+
+
 def map_provider_to_plugin(provider: GitProvider) -> str:
     mapping = {
         "github": "github",
@@ -187,12 +209,21 @@ def build_connection_payload(provider: GitProvider, plugin_name: str) -> dict[st
     payload: dict[str, Any] = {"name": provider.name}
 
     if plugin_name == "github":
-        payload["endpoint"] = provider.base_url or "https://api.github.com"
+        # DevLake GithubConn embeds MultiAuth; authMethod is required (BasicAuth | AccessToken | AppKey).
+        # PAT / classic token path:
+        payload["authMethod"] = "AccessToken"
+        payload["endpoint"] = _normalize_devlake_rest_endpoint(
+            provider.base_url or "https://api.github.com/"
+        )
         if not provider.access_token:
             raise HTTPException(status_code=400, detail="GitHub provider requires access_token for DevLake sync")
         payload["token"] = provider.access_token
+        # Matches github/api/connection_api.go PostConnections default.
+        payload["enableGraphql"] = True
     elif plugin_name == "gitlab":
-        payload["endpoint"] = provider.base_url or "https://gitlab.com/api/v4"
+        payload["endpoint"] = _normalize_devlake_rest_endpoint(
+            provider.base_url or "https://gitlab.com/api/v4/"
+        )
         if not provider.access_token:
             raise HTTPException(status_code=400, detail="GitLab provider requires access_token for DevLake sync")
         payload["token"] = provider.access_token
