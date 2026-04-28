@@ -323,3 +323,32 @@ def ensure_project_exists(
     provider_key = provider.type.value if hasattr(provider.type, "value") else str(provider.type)
     description = f"Managed by PR-Agent for provider {provider_key}:{provider.id}"
     client.create_project(normalized_name, description=description)
+
+
+def apply_scope_selection_and_blueprint(
+    client: DevLakeClient,
+    *,
+    plugin_name: str,
+    integration: DevLakeIntegration,
+) -> int:
+    """Persist selected scopes and ensure blueprint reflects latest selection."""
+    if not integration.connection_id:
+        raise HTTPException(status_code=500, detail="Missing DevLake connection_id on integration row")
+
+    selected_scopes = list(integration.selected_scopes or [])
+    client.put_scopes(plugin_name, integration.connection_id, selected_scopes)
+
+    payload = build_blueprint_payload(
+        integration=integration,
+        plugin_name=plugin_name,
+    )
+    if integration.blueprint_id:
+        bp = client.patch_blueprint(integration.blueprint_id, payload)
+        bp_id = bp.get("id", integration.blueprint_id)
+    else:
+        bp = client.create_blueprint(payload)
+        bp_id = bp.get("id")
+
+    if not isinstance(bp_id, int):
+        raise HTTPException(status_code=502, detail=f"Unexpected DevLake blueprint payload: {bp}")
+    return bp_id
