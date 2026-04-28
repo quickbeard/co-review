@@ -145,7 +145,7 @@
       "enabled": "Bật tích hợp DevLake cho nhà cung cấp này",
       "projectName": "Tên dự án DevLake",
       "projectNameHelpReuse": "Nếu tên này đã tồn tại trong DevLake, quá trình đồng bộ sẽ liên kết provider/blueprint này với dự án hiện có.",
-      "projectNameHelpCreate": "Nếu chưa tồn tại, backend sẽ tạo và liên kết một dự án mới trong bản cập nhật tiếp theo.",
+      "projectNameHelpCreate": "Nếu chưa tồn tại, backend sẽ tạo và liên kết một dự án mới.",
       "projectNamePlaceholder": "ví dụ: my-team-engineering",
       "scopes": "Phạm vi đã chọn (mảng JSON)",
       "invalidScopesJson": "Phạm vi phải là một mảng JSON hợp lệ.",
