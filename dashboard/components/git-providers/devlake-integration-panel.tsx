@@ -161,6 +161,12 @@ export function DevLakeIntegrationPanel({
         <Label htmlFor="devlake-project-name">
           {dict.gitProviders.devlake.projectName}
         </Label>
+        <p className="text-xs text-muted-foreground">
+          {dict.gitProviders.devlake.projectNameHelpReuse}
+        </p>
+        <p className="text-xs text-muted-foreground">
+          {dict.gitProviders.devlake.projectNameHelpCreate}
+        </p>
         <Input
           id="devlake-project-name"
           value={projectName}
