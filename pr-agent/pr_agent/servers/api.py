@@ -139,6 +139,10 @@ def get_provider(
 def create_provider(
     provider_data: GitProviderCreate,
     session: SessionDep,
+    auto_sync_on_create: bool = Query(
+        default=False,
+        description="If true, attempt DevLake sync right after provider creation",
+    ),
 ) -> GitProvider:
     """Create a new git provider."""
     # Validate GitHub-specific requirements
@@ -171,6 +175,31 @@ def create_provider(
     session.add(provider)
     session.commit()
     session.refresh(provider)
+
+    if auto_sync_on_create:
+        integration = _get_or_create_integration(session, provider.id)  # type: ignore[arg-type]
+        try:
+            _sync_provider_to_devlake(
+                session=session,
+                provider=provider,
+                integration=integration,
+                full_sync=False,
+                skip_collectors=False,
+            )
+        except HTTPException as exc:
+            # Keep provider creation successful; persist failure details so callers
+            # can inspect and retry via /devlake/sync.
+            integration.last_sync_status = "failed"
+            integration.last_sync_error = str(exc.detail)
+            integration.last_synced_at = datetime.now(timezone.utc)
+            integration.updated_at = datetime.now(timezone.utc)
+            session.add(integration)
+            session.commit()
+            get_logger().warning(
+                "Auto DevLake sync failed for provider id=%s: %s",
+                provider.id,
+                exc.detail,
+            )
 
     get_logger().info(f"Created git provider: {provider.name} (type={provider.type})")
     return provider
@@ -292,6 +321,85 @@ def _get_or_create_integration(session: Session, provider_id: int) -> DevLakeInt
     return row
 
 
+def _ensure_devlake_connection(
+    *,
+    provider: GitProvider,
+    integration: DevLakeIntegration,
+) -> tuple[str, devlake_service.DevLakeClient]:
+    plugin_name = devlake_service.map_provider_to_plugin(provider)
+    client = devlake_service.DevLakeClient(devlake_service.load_settings())
+    if integration.connection_id:
+        return plugin_name, client
+
+    conn_payload = devlake_service.build_connection_payload(provider, plugin_name)
+    conn = client.create_connection(plugin_name, conn_payload)
+    conn_id = conn.get("id")
+    if not isinstance(conn_id, int):
+        raise HTTPException(status_code=502, detail=f"Unexpected DevLake connection payload: {conn}")
+    integration.connection_id = conn_id
+    integration.plugin_name = plugin_name
+    return plugin_name, client
+
+
+def _sync_provider_to_devlake(
+    *,
+    session: Session,
+    provider: GitProvider,
+    integration: DevLakeIntegration,
+    full_sync: bool,
+    skip_collectors: bool,
+) -> DevLakeSyncResponse:
+    plugin_name, client = _ensure_devlake_connection(
+        provider=provider,
+        integration=integration,
+    )
+
+    selected_scopes = list(integration.selected_scopes or [])
+    if selected_scopes:
+        client.put_scopes(plugin_name, integration.connection_id, selected_scopes)  # type: ignore[arg-type]
+
+    if not integration.project_name:
+        integration.project_name = f"{provider.type.value}-{provider.id}"
+
+    blueprint_payload = devlake_service.build_blueprint_payload(
+        integration=integration,
+        plugin_name=plugin_name,
+    )
+
+    if integration.blueprint_id:
+        bp = client.patch_blueprint(integration.blueprint_id, blueprint_payload)
+    else:
+        bp = client.create_blueprint(blueprint_payload)
+        bp_id = bp.get("id")
+        if not isinstance(bp_id, int):
+            raise HTTPException(status_code=502, detail=f"Unexpected DevLake blueprint payload: {bp}")
+        integration.blueprint_id = bp_id
+
+    pipeline = client.trigger_blueprint(
+        integration.blueprint_id,  # type: ignore[arg-type]
+        full_sync=full_sync,
+        skip_collectors=skip_collectors,
+    )
+
+    integration.plugin_name = plugin_name
+    integration.last_pipeline_id = pipeline.get("id") if isinstance(pipeline.get("id"), int) else None
+    integration.last_sync_status = "triggered"
+    integration.last_sync_error = None
+    integration.last_synced_at = datetime.now(timezone.utc)
+    integration.updated_at = datetime.now(timezone.utc)
+    session.add(integration)
+    session.commit()
+    session.refresh(integration)
+
+    return DevLakeSyncResponse(
+        status="triggered",
+        plugin_name=plugin_name,
+        connection_id=integration.connection_id,  # type: ignore[arg-type]
+        blueprint_id=integration.blueprint_id,  # type: ignore[arg-type]
+        pipeline_id=integration.last_pipeline_id,
+    )
+
+
 @app.get(
     "/api/git-providers/{provider_id}/devlake",
     response_model=DevLakeIntegrationPublic,
@@ -321,7 +429,13 @@ def upsert_devlake_integration(
     for key, value in data.items():
         setattr(row, key, value)
 
-    row.plugin_name = devlake_service.map_provider_to_plugin(provider)
+    # Create the DevLake connection as soon as config is saved so callers can
+    # list remote scopes immediately without a separate /sync bootstrap step.
+    plugin_name, _ = _ensure_devlake_connection(
+        provider=provider,
+        integration=row,
+    )
+    row.plugin_name = plugin_name
     row.updated_at = datetime.now(timezone.utc)
     session.add(row)
     session.commit()
@@ -342,14 +456,14 @@ def list_devlake_remote_scopes(
 ) -> DevLakeRemoteScopesResponse:
     provider = _get_devlake_provider_or_404(session, provider_id)
     row = _get_or_create_integration(session, provider_id)
-    if not row.connection_id:
-        raise HTTPException(
-            status_code=400,
-            detail="No DevLake connection exists yet; run /devlake/sync first",
-        )
+    plugin_name, client = _ensure_devlake_connection(
+        provider=provider,
+        integration=row,
+    )
+    row.updated_at = datetime.now(timezone.utc)
+    session.add(row)
+    session.commit()
 
-    plugin_name = devlake_service.map_provider_to_plugin(provider)
-    client = devlake_service.DevLakeClient(devlake_service.load_settings())
     raw = client.list_remote_scopes(
         plugin_name,
         row.connection_id,
@@ -383,62 +497,12 @@ def sync_git_provider_to_devlake(
 ) -> DevLakeSyncResponse:
     provider = _get_devlake_provider_or_404(session, provider_id)
     integration = _get_or_create_integration(session, provider_id)
-    plugin_name = devlake_service.map_provider_to_plugin(provider)
-
-    settings = devlake_service.load_settings()
-    client = devlake_service.DevLakeClient(settings)
-
-    if not integration.connection_id:
-        conn_payload = devlake_service.build_connection_payload(provider, plugin_name)
-        conn = client.create_connection(plugin_name, conn_payload)
-        conn_id = conn.get("id")
-        if not isinstance(conn_id, int):
-            raise HTTPException(status_code=502, detail=f"Unexpected DevLake connection payload: {conn}")
-        integration.connection_id = conn_id
-
-    selected_scopes = list(integration.selected_scopes or [])
-    if selected_scopes:
-        client.put_scopes(plugin_name, integration.connection_id, selected_scopes)  # type: ignore[arg-type]
-
-    if not integration.project_name:
-        integration.project_name = f"{provider.type.value}-{provider.id}"
-
-    blueprint_payload = devlake_service.build_blueprint_payload(
+    return _sync_provider_to_devlake(
+        session=session,
+        provider=provider,
         integration=integration,
-        plugin_name=plugin_name,
-    )
-
-    if integration.blueprint_id:
-        bp = client.patch_blueprint(integration.blueprint_id, blueprint_payload)
-    else:
-        bp = client.create_blueprint(blueprint_payload)
-        bp_id = bp.get("id")
-        if not isinstance(bp_id, int):
-            raise HTTPException(status_code=502, detail=f"Unexpected DevLake blueprint payload: {bp}")
-        integration.blueprint_id = bp_id
-
-    pipeline = client.trigger_blueprint(
-        integration.blueprint_id,  # type: ignore[arg-type]
         full_sync=payload.full_sync,
         skip_collectors=payload.skip_collectors,
-    )
-
-    integration.plugin_name = plugin_name
-    integration.last_pipeline_id = pipeline.get("id") if isinstance(pipeline.get("id"), int) else None
-    integration.last_sync_status = "triggered"
-    integration.last_sync_error = None
-    integration.last_synced_at = datetime.now(timezone.utc)
-    integration.updated_at = datetime.now(timezone.utc)
-    session.add(integration)
-    session.commit()
-    session.refresh(integration)
-
-    return DevLakeSyncResponse(
-        status="triggered",
-        plugin_name=plugin_name,
-        connection_id=integration.connection_id,  # type: ignore[arg-type]
-        blueprint_id=integration.blueprint_id,  # type: ignore[arg-type]
-        pipeline_id=integration.last_pipeline_id,
     )
 
 
