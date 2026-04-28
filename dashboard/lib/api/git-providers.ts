@@ -101,12 +101,17 @@ export async function getGitProvider(
  */
 export async function createGitProvider(
   input: CreateGitProviderInput,
-  options?: { autoSyncOnCreate?: boolean },
+  options?: { autoSyncOnCreate?: boolean; devlakeProjectName?: string },
 ): Promise<ApiResponse<GitProvider>> {
   try {
     const apiRequest = transformCreateInputToApiRequest(input);
-    const query =
-      options?.autoSyncOnCreate === true ? "?auto_sync_on_create=true" : "";
+    const params = new URLSearchParams();
+    if (options?.autoSyncOnCreate === true) {
+      params.set("auto_sync_on_create", "true");
+      const projectName = options?.devlakeProjectName?.trim();
+      if (projectName) params.set("devlake_project_name", projectName);
+    }
+    const query = params.toString() ? `?${params.toString()}` : "";
     const response = await fetch(`${API_BASE_URL}/api/git-providers${query}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
