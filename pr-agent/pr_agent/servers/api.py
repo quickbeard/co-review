@@ -427,6 +427,11 @@ def _sync_provider_to_devlake(
 
     if not integration.project_name:
         integration.project_name = f"{provider.type.value}-{provider.id}"
+    devlake_service.ensure_project_exists(
+        client,
+        project_name=integration.project_name,
+        provider=provider,
+    )
 
     blueprint_payload = devlake_service.build_blueprint_payload(
         integration=integration,
@@ -556,6 +561,13 @@ def upsert_devlake_integration(
         provider=provider,
         integration=row,
     )
+    if row.project_name:
+        client = devlake_service.DevLakeClient(devlake_service.load_settings())
+        devlake_service.ensure_project_exists(
+            client,
+            project_name=row.project_name,
+            provider=provider,
+        )
     row.plugin_name = plugin_name
     row.updated_at = datetime.now(timezone.utc)
     session.add(row)

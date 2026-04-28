@@ -132,8 +132,37 @@ class DevLakeClient:
                 detail=f"Cannot reach DevLake API: {exc.reason}",
             ) from exc
 
+    @staticmethod
+    def _unwrap_data(raw: Any) -> Any:
+        """Support both raw-object and {data: ...} response envelopes."""
+        if isinstance(raw, dict) and "data" in raw:
+            return raw.get("data")
+        return raw
+
     def create_connection(self, plugin_name: str, payload: dict[str, Any]) -> dict[str, Any]:
         return self._request("POST", f"/plugins/{plugin_name}/connections", payload=payload)
+
+    def project_exists(self, project_name: str) -> bool:
+        encoded_name = parse.quote(project_name, safe="")
+        raw = self._request("GET", f"/projects/{encoded_name}/check")
+        body = self._unwrap_data(raw)
+        if isinstance(body, dict) and isinstance(body.get("exist"), bool):
+            return body["exist"]
+        raise HTTPException(status_code=502, detail=f"Unexpected DevLake project-check payload: {raw}")
+
+    def create_project(self, project_name: str, description: str) -> dict[str, Any]:
+        raw = self._request(
+            "POST",
+            "/projects",
+            payload={
+                "name": project_name,
+                "description": description,
+            },
+        )
+        body = self._unwrap_data(raw)
+        if isinstance(body, dict):
+            return body
+        raise HTTPException(status_code=502, detail=f"Unexpected DevLake project payload: {raw}")
 
     def list_remote_scopes(
         self,
@@ -276,3 +305,21 @@ def build_blueprint_payload(
             }
         ],
     }
+
+
+def ensure_project_exists(
+    client: DevLakeClient,
+    *,
+    project_name: str,
+    provider: GitProvider,
+) -> None:
+    normalized_name = (project_name or "").strip()
+    if not normalized_name:
+        raise HTTPException(status_code=400, detail="project_name is required for DevLake project linkage")
+
+    if client.project_exists(normalized_name):
+        return
+
+    provider_key = provider.type.value if hasattr(provider.type, "value") else str(provider.type)
+    description = f"Managed by PR-Agent for provider {provider_key}:{provider.id}"
+    client.create_project(normalized_name, description=description)
