@@ -209,8 +209,6 @@ def build_connection_payload(provider: GitProvider, plugin_name: str) -> dict[st
     payload: dict[str, Any] = {"name": provider.name}
 
     if plugin_name == "github":
-        # DevLake GithubConn embeds MultiAuth; authMethod is required (BasicAuth | AccessToken | AppKey).
-        # PAT / classic token path:
         payload["authMethod"] = "AccessToken"
         payload["endpoint"] = _normalize_devlake_rest_endpoint(
             provider.base_url or "https://api.github.com/"
@@ -218,8 +216,6 @@ def build_connection_payload(provider: GitProvider, plugin_name: str) -> dict[st
         if not provider.access_token:
             raise HTTPException(status_code=400, detail="GitHub provider requires access_token for DevLake sync")
         payload["token"] = provider.access_token
-        # Matches github/api/connection_api.go PostConnections default.
-        payload["enableGraphql"] = True
     elif plugin_name == "gitlab":
         payload["endpoint"] = _normalize_devlake_rest_endpoint(
             provider.base_url or "https://gitlab.com/api/v4/"
