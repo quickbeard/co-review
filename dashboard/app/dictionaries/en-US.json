@@ -145,7 +145,7 @@
       "enabled": "Enable DevLake integration for this provider",
       "projectName": "DevLake Project Name",
       "projectNameHelpReuse": "If this name already exists in DevLake, sync links this provider/blueprint to that existing project.",
-      "projectNameHelpCreate": "If it does not exist, a new project will be created and linked in a follow-up backend update.",
+      "projectNameHelpCreate": "If it does not exist, a new project will be created and linked",
       "projectNamePlaceholder": "e.g., my-team-engineering",
       "scopes": "Selected scopes (JSON array)",
       "invalidScopesJson": "Scopes must be a valid JSON array.",
