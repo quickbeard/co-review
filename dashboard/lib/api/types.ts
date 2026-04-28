@@ -174,6 +174,19 @@ export interface DevLakeSyncJobStatusResponse {
   error: string | null;
 }
 
+export interface DevLakeRemoteScope {
+  id?: string | number;
+  scopeId?: string | number;
+  name?: string;
+  fullName?: string;
+  [key: string]: unknown;
+}
+
+export interface DevLakeRemoteScopesResponse {
+  scopes: DevLakeRemoteScope[];
+  count: number;
+}
+
 // Transform functions
 export function transformApiResponseToProvider(
   apiResponse: GitProviderApiResponse,

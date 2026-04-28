@@ -8,6 +8,7 @@ import type {
   DevLakeValidateResponse,
   DevLakeSyncAcceptedResponse,
   DevLakeSyncJobStatusResponse,
+  DevLakeRemoteScopesResponse,
   UpdateDevLakeIntegrationInput,
   ApiResponse,
 } from "./types";
@@ -295,6 +296,33 @@ export async function validateDevLakeIntegration(
     return { success: true, data };
   } catch (error) {
     console.error("Failed to validate DevLake integration:", error);
+    return { success: false, error: "Failed to connect to PR-Agent API" };
+  }
+}
+
+export async function listDevLakeRemoteScopes(
+  providerId: number | string,
+): Promise<ApiResponse<DevLakeRemoteScopesResponse>> {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/git-providers/${providerId}/devlake/remote-scopes`,
+      {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+      },
+    );
+    if (!response.ok) {
+      const error = await parseErrorResponse(response);
+      return {
+        success: false,
+        error: error.detail || error.message || "Failed to load remote scopes",
+      };
+    }
+    const data: DevLakeRemoteScopesResponse = await response.json();
+    return { success: true, data };
+  } catch (error) {
+    console.error("Failed to list DevLake remote scopes:", error);
     return { success: false, error: "Failed to connect to PR-Agent API" };
   }
 }
