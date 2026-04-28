@@ -255,6 +255,17 @@ def delete_provider(
     if not provider:
         raise HTTPException(status_code=404, detail="Provider not found")
 
+    integration_stmt = select(DevLakeIntegration).where(DevLakeIntegration.git_provider_id == provider_id)
+    integration = session.exec(integration_stmt).first()
+    if integration and (integration.connection_id or integration.blueprint_id or integration.project_name):
+        plugin_name = integration.plugin_name or devlake_service.map_provider_to_plugin(provider)
+        client = devlake_service.DevLakeClient(devlake_service.load_settings())
+        devlake_service.cleanup_integration_resources(
+            client,
+            plugin_name=plugin_name,
+            integration=integration,
+        )
+
     provider_name = provider.name
     session.delete(provider)
     session.commit()

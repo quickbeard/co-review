@@ -94,6 +94,8 @@ class DevLakeClient:
         path: str,
         payload: dict[str, Any] | None = None,
         query: dict[str, Any] | None = None,
+        *,
+        allow_not_found: bool = False,
     ) -> Any:
         url = self._build_url(path, query=query)
         body = None
@@ -117,6 +119,8 @@ class DevLakeClient:
                     return {}
                 return json.loads(raw.decode("utf-8"))
         except error.HTTPError as exc:
+            if allow_not_found and exc.code == 404:
+                return {}
             detail = exc.read().decode("utf-8", errors="ignore")
             safe_payload = self._redact_payload(payload)
             raise HTTPException(
@@ -142,6 +146,13 @@ class DevLakeClient:
     def create_connection(self, plugin_name: str, payload: dict[str, Any]) -> dict[str, Any]:
         return self._request("POST", f"/plugins/{plugin_name}/connections", payload=payload)
 
+    def delete_connection(self, plugin_name: str, connection_id: int, *, allow_not_found: bool = True) -> Any:
+        return self._request(
+            "DELETE",
+            f"/plugins/{plugin_name}/connections/{connection_id}",
+            allow_not_found=allow_not_found,
+        )
+
     def project_exists(self, project_name: str) -> bool:
         encoded_name = parse.quote(project_name, safe="")
         raw = self._request("GET", f"/projects/{encoded_name}/check")
@@ -163,6 +174,14 @@ class DevLakeClient:
         if isinstance(body, dict):
             return body
         raise HTTPException(status_code=502, detail=f"Unexpected DevLake project payload: {raw}")
+
+    def delete_project(self, project_name: str, *, allow_not_found: bool = True) -> Any:
+        encoded_name = parse.quote(project_name, safe="")
+        return self._request(
+            "DELETE",
+            f"/projects/{encoded_name}",
+            allow_not_found=allow_not_found,
+        )
 
     def list_remote_scopes(
         self,
@@ -191,6 +210,13 @@ class DevLakeClient:
 
     def create_blueprint(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self._request("POST", "/blueprints", payload=payload)
+
+    def delete_blueprint(self, blueprint_id: int, *, allow_not_found: bool = True) -> Any:
+        return self._request(
+            "DELETE",
+            f"/blueprints/{blueprint_id}",
+            allow_not_found=allow_not_found,
+        )
 
     def patch_blueprint(self, blueprint_id: int, payload: dict[str, Any]) -> dict[str, Any]:
         return self._request("PATCH", f"/blueprints/{blueprint_id}", payload=payload)
@@ -352,3 +378,18 @@ def apply_scope_selection_and_blueprint(
     if not isinstance(bp_id, int):
         raise HTTPException(status_code=502, detail=f"Unexpected DevLake blueprint payload: {bp}")
     return bp_id
+
+
+def cleanup_integration_resources(
+    client: DevLakeClient,
+    *,
+    plugin_name: str,
+    integration: DevLakeIntegration,
+) -> None:
+    """Delete DevLake resources created for an integration row."""
+    if integration.blueprint_id:
+        client.delete_blueprint(integration.blueprint_id)
+    if integration.connection_id:
+        client.delete_connection(plugin_name, integration.connection_id)
+    if integration.project_name:
+        client.delete_project(integration.project_name)

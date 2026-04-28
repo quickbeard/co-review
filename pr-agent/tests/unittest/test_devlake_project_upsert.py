@@ -6,6 +6,7 @@ from pr_agent.services.devlake import (
     DevLakeClient,
     DevLakeSettings,
     apply_scope_selection_and_blueprint,
+    cleanup_integration_resources,
     ensure_project_exists,
 )
 
@@ -147,3 +148,27 @@ def test_apply_scope_selection_and_blueprint_patches_existing(monkeypatch: pytes
     )
     assert bp_id == 77
     assert called == {"put": 1, "patch": 1}
+
+
+def test_cleanup_integration_resources_deletes_all(monkeypatch: pytest.MonkeyPatch):
+    from pr_agent.db.models import DevLakeIntegration
+
+    client = _client()
+    integration = DevLakeIntegration(
+        git_provider_id=7,
+        connection_id=11,
+        blueprint_id=77,
+        project_name="github-7",
+    )
+    called = {"bp": 0, "conn": 0, "proj": 0}
+
+    monkeypatch.setattr(client, "delete_blueprint", lambda blueprint_id: called.__setitem__("bp", blueprint_id))
+    monkeypatch.setattr(client, "delete_connection", lambda plugin_name, connection_id: called.__setitem__("conn", connection_id))
+    monkeypatch.setattr(client, "delete_project", lambda project_name: called.__setitem__("proj", 1))
+
+    cleanup_integration_resources(
+        client,
+        plugin_name="github",
+        integration=integration,
+    )
+    assert called == {"bp": 77, "conn": 11, "proj": 1}
