@@ -63,6 +63,7 @@ export function GitProviderForm({ provider, lang }: GitProviderFormProps) {
   const [showAccessToken, setShowAccessToken] = useState(false);
   const [showPrivateKey, setShowPrivateKey] = useState(false);
   const [showWebhookSecret, setShowWebhookSecret] = useState(false);
+  const [autoSyncOnCreate, setAutoSyncOnCreate] = useState(true);
 
   const showBaseUrl = selfHostedProviders.includes(selectedType);
   const isGitHub = selectedType === "github";
@@ -98,7 +99,7 @@ export function GitProviderForm({ provider, lang }: GitProviderFormProps) {
           appId: (formData.get("appId") as string) || undefined,
           privateKey: (formData.get("privateKey") as string) || undefined,
           webhookSecret: (formData.get("webhookSecret") as string) || undefined,
-        });
+        }, { autoSyncOnCreate });
       }
 
       if (!result.success) {
@@ -409,6 +410,18 @@ export function GitProviderForm({ provider, lang }: GitProviderFormProps) {
       </div>
 
       {/* Form Actions */}
+      {!isEdit && (
+        <label className="flex items-center gap-2 text-sm text-muted-foreground">
+          <input
+            type="checkbox"
+            checked={autoSyncOnCreate}
+            onChange={(e) => setAutoSyncOnCreate(e.target.checked)}
+            className="h-4 w-4 rounded border-border text-primary"
+          />
+          {dict.gitProviders.form.autoSyncOnCreate}
+        </label>
+      )}
+
       <div className="flex gap-3">
         <Button type="submit" disabled={pending}>
           {pending

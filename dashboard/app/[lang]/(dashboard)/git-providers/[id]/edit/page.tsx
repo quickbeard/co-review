@@ -6,7 +6,10 @@ export const dynamic = "force-dynamic";
 
 import { notFound } from "next/navigation";
 
-import { GitProviderForm } from "@/components/git-providers";
+import {
+  DevLakeIntegrationPanel,
+  GitProviderForm,
+} from "@/components/git-providers";
 import { hasLocale } from "@/lib/i18n/config";
 import { getGitProvider } from "@/lib/api/git-providers";
 
@@ -24,8 +27,13 @@ export default async function EditGitProviderPage({
   }
 
   return (
-    <div className="max-w-xl rounded-lg border border-border bg-background p-6">
-      <GitProviderForm provider={result.data} lang={lang} />
+    <div className="space-y-6">
+      <div className="max-w-xl rounded-lg border border-border bg-background p-6">
+        <GitProviderForm provider={result.data} lang={lang} />
+      </div>
+      <div className="max-w-xl">
+        <DevLakeIntegrationPanel providerId={result.data.id} />
+      </div>
     </div>
   );
 }

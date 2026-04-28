@@ -5,6 +5,10 @@ import { BarChart3 } from "lucide-react";
 import { hasLocale } from "@/lib/i18n/config";
 import { getDictionary } from "@/app/dictionaries";
 import { GrafanaEmbed } from "@/components/analytics";
+import {
+  getDevLakeIntegration,
+  getGitProviders,
+} from "@/lib/api/git-providers";
 
 export default async function AnalyticsPage({
   params,
@@ -18,7 +22,42 @@ export default async function AnalyticsPage({
   }
 
   const dict = await getDictionary(lang);
-  const grafanaUrl = process.env.NEXT_PUBLIC_DEVLAKE_GRAFANA_URL;
+  const grafanaBaseUrl = process.env.NEXT_PUBLIC_DEVLAKE_GRAFANA_URL;
+  let grafanaUrl = grafanaBaseUrl || null;
+
+  if (grafanaBaseUrl) {
+    const providersResult = await getGitProviders();
+    if (providersResult.success && providersResult.data?.length) {
+      const activeProvider = providersResult.data.find((p) => p.isActive);
+      if (activeProvider) {
+        const integrationResult = await getDevLakeIntegration(activeProvider.id);
+        if (
+          integrationResult.success &&
+          integrationResult.data?.enabled &&
+          integrationResult.data.selectedScopes.length > 0
+        ) {
+          const parsed = new URL(grafanaBaseUrl);
+          const names = integrationResult.data.selectedScopes
+            .map((scope) => {
+              const record = scope as Record<string, unknown>;
+              return (
+                (typeof record.fullName === "string" && record.fullName) ||
+                (typeof record.name === "string" && record.name) ||
+                null
+              );
+            })
+            .filter((name): name is string => !!name);
+          if (names.length > 0) {
+            parsed.searchParams.delete("var-repo");
+            for (const name of names) {
+              parsed.searchParams.append("var-repo", name);
+            }
+            grafanaUrl = parsed.toString();
+          }
+        }
+      }
+    }
+  }
 
   return (
     <div className="space-y-6">
