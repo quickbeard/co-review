@@ -131,11 +131,29 @@
       "showToken": "Show token",
       "hideToken": "Hide token",
       "optional": "optional",
+      "autoSyncOnCreate": "Auto-sync with DevLake after creating provider",
       "create": "Create Provider",
       "update": "Update Provider",
       "saving": "Saving...",
       "cancel": "Cancel",
       "errorGeneric": "Something went wrong. Please try again."
+    },
+    "devlake": {
+      "title": "DevLake Integration",
+      "description": "Configure connection, scopes, and run ingestion for this provider.",
+      "loading": "Loading DevLake settings...",
+      "enabled": "Enable DevLake integration for this provider",
+      "projectName": "Project Name",
+      "projectNamePlaceholder": "e.g., my-team-engineering",
+      "scopes": "Selected scopes (JSON array)",
+      "invalidScopesJson": "Scopes must be a valid JSON array.",
+      "lastStatus": "Last sync status",
+      "save": "Save DevLake Settings",
+      "saving": "Saving...",
+      "validate": "Validate Connection",
+      "sync": "Run Sync",
+      "syncing": "Syncing...",
+      "syncFailed": "Sync failed. Check backend logs and DevLake credentials."
     },
     "actions": {
       "openMenu": "Open menu",
@@ -281,7 +299,7 @@
   },
   "analytics": {
     "title": "Analytics",
-    "description": "Engineering insights from Apache DevLake — powered by Grafana.",
+    "description": "Engineering insights from Apache DevLake — powered by Grafana and filtered by your selected provider scopes.",
     "openInGrafana": "Open in Grafana",
     "refresh": "Refresh",
     "notConfigured": {
