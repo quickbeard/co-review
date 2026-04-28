@@ -421,10 +421,6 @@ def _sync_provider_to_devlake(
         integration=integration,
     )
 
-    selected_scopes = list(integration.selected_scopes or [])
-    if selected_scopes:
-        client.put_scopes(plugin_name, integration.connection_id, selected_scopes)  # type: ignore[arg-type]
-
     if not integration.project_name:
         integration.project_name = f"{provider.type.value}-{provider.id}"
     devlake_service.ensure_project_exists(
@@ -433,19 +429,11 @@ def _sync_provider_to_devlake(
         provider=provider,
     )
 
-    blueprint_payload = devlake_service.build_blueprint_payload(
-        integration=integration,
+    integration.blueprint_id = devlake_service.apply_scope_selection_and_blueprint(
+        client,
         plugin_name=plugin_name,
+        integration=integration,
     )
-
-    if integration.blueprint_id:
-        bp = client.patch_blueprint(integration.blueprint_id, blueprint_payload)
-    else:
-        bp = client.create_blueprint(blueprint_payload)
-        bp_id = bp.get("id")
-        if not isinstance(bp_id, int):
-            raise HTTPException(status_code=502, detail=f"Unexpected DevLake blueprint payload: {bp}")
-        integration.blueprint_id = bp_id
 
     pipeline = client.trigger_blueprint(
         integration.blueprint_id,  # type: ignore[arg-type]
@@ -561,13 +549,19 @@ def upsert_devlake_integration(
         provider=provider,
         integration=row,
     )
-    if row.project_name:
-        client = devlake_service.DevLakeClient(devlake_service.load_settings())
-        devlake_service.ensure_project_exists(
-            client,
-            project_name=row.project_name,
-            provider=provider,
-        )
+    if not row.project_name:
+        row.project_name = f"{provider.type.value}-{provider.id}"
+    client = devlake_service.DevLakeClient(devlake_service.load_settings())
+    devlake_service.ensure_project_exists(
+        client,
+        project_name=row.project_name,
+        provider=provider,
+    )
+    row.blueprint_id = devlake_service.apply_scope_selection_and_blueprint(
+        client,
+        plugin_name=plugin_name,
+        integration=row,
+    )
     row.plugin_name = plugin_name
     row.updated_at = datetime.now(timezone.utc)
     session.add(row)

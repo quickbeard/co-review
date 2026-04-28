@@ -2,7 +2,12 @@ import pytest
 from fastapi import HTTPException
 
 from pr_agent.db.models import GitProvider, GitProviderType
-from pr_agent.services.devlake import DevLakeClient, DevLakeSettings, ensure_project_exists
+from pr_agent.services.devlake import (
+    DevLakeClient,
+    DevLakeSettings,
+    apply_scope_selection_and_blueprint,
+    ensure_project_exists,
+)
 
 
 def _provider() -> GitProvider:
@@ -73,3 +78,72 @@ def test_ensure_project_exists_rejects_empty_name():
     with pytest.raises(HTTPException) as exc:
         ensure_project_exists(_client(), project_name="  ", provider=_provider())
     assert exc.value.status_code == 400
+
+
+def test_apply_scope_selection_and_blueprint_creates_when_missing(monkeypatch: pytest.MonkeyPatch):
+    from pr_agent.db.models import DevLakeIntegration
+
+    client = _client()
+    integration = DevLakeIntegration(
+        git_provider_id=7,
+        connection_id=11,
+        blueprint_id=None,
+        project_name="github-7",
+        selected_scopes=[{"scopeId": "1", "name": "org/repo"}],
+    )
+    called = {"put": 0, "create": 0}
+
+    def fake_put(plugin_name: str, connection_id: int, scopes):
+        called["put"] += 1
+        assert plugin_name == "github"
+        assert connection_id == 11
+        assert scopes == [{"scopeId": "1", "name": "org/repo"}]
+
+    def fake_create(payload):
+        called["create"] += 1
+        assert payload["projectName"] == "github-7"
+        return {"id": 99}
+
+    monkeypatch.setattr(client, "put_scopes", fake_put)
+    monkeypatch.setattr(client, "create_blueprint", fake_create)
+    monkeypatch.setattr(client, "patch_blueprint", lambda blueprint_id, payload: {"id": blueprint_id})
+
+    bp_id = apply_scope_selection_and_blueprint(
+        client,
+        plugin_name="github",
+        integration=integration,
+    )
+    assert bp_id == 99
+    assert called == {"put": 1, "create": 1}
+
+
+def test_apply_scope_selection_and_blueprint_patches_existing(monkeypatch: pytest.MonkeyPatch):
+    from pr_agent.db.models import DevLakeIntegration
+
+    client = _client()
+    integration = DevLakeIntegration(
+        git_provider_id=7,
+        connection_id=11,
+        blueprint_id=77,
+        project_name="github-7",
+        selected_scopes=[],
+    )
+    called = {"put": 0, "patch": 0}
+
+    monkeypatch.setattr(client, "put_scopes", lambda plugin_name, connection_id, scopes: called.__setitem__("put", 1))
+
+    def fake_patch(blueprint_id: int, payload):
+        called["patch"] += 1
+        assert blueprint_id == 77
+        return {"id": 77}
+
+    monkeypatch.setattr(client, "patch_blueprint", fake_patch)
+    monkeypatch.setattr(client, "create_blueprint", lambda payload: {"id": 999})
+
+    bp_id = apply_scope_selection_and_blueprint(
+        client,
+        plugin_name="github",
+        integration=integration,
+    )
+    assert bp_id == 77
+    assert called == {"put": 1, "patch": 1}
