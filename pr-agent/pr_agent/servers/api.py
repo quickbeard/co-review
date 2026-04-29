@@ -295,6 +295,19 @@ class DevLakeRemoteScopesResponse(BaseModel):
     count: int
 
 
+class DevLakeRemoteScopesPreviewRequest(BaseModel):
+    type: GitProviderType
+    name: str
+    base_url: str | None = None
+    access_token: str | None = None
+    deployment_type: str | None = None
+    app_id: str | None = None
+    private_key: str | None = None
+    webhook_secret: str | None = None
+    organization: str | None = None
+    pat: str | None = None
+
+
 class DevLakeSyncRequest(BaseModel):
     full_sync: bool = False
     skip_collectors: bool = False
@@ -624,6 +637,55 @@ def list_devlake_remote_scopes(
         page_size=page_size,
         search_term=search_term,
     )
+
+    scopes = []
+    children = raw.get("children") or raw.get("scopes") or []
+    if isinstance(children, list):
+        for item in children:
+            if isinstance(item, dict):
+                scopes.append(item)
+
+    count = raw.get("count")
+    if not isinstance(count, int):
+        count = len(scopes)
+
+    return DevLakeRemoteScopesResponse(scopes=scopes, count=count)
+
+
+@app.post(
+    "/api/git-providers/devlake/remote-scopes/preview",
+    response_model=DevLakeRemoteScopesResponse,
+)
+def preview_devlake_remote_scopes(
+    payload: DevLakeRemoteScopesPreviewRequest,
+    page: Annotated[int, Query(ge=1)] = 1,
+    page_size: Annotated[int, Query(ge=1, le=500)] = 100,
+    search_term: str | None = None,
+) -> DevLakeRemoteScopesResponse:
+    # Build an in-memory provider-like object (not persisted) so we can reuse
+    # existing DevLake mapping/payload helpers.
+    provider = GitProvider.model_validate(payload.model_dump())
+    plugin_name = devlake_service.map_provider_to_plugin(provider)
+    client = devlake_service.DevLakeClient(devlake_service.load_settings())
+
+    conn_payload = devlake_service.build_connection_payload(provider, plugin_name)
+    # Avoid duplicate-name collisions for preview-only DevLake connections.
+    conn_payload["name"] = f"preview-{provider.name}-{uuid.uuid4().hex[:8]}"
+    conn = client.create_connection(plugin_name, conn_payload)
+    conn_id = conn.get("id")
+    if not isinstance(conn_id, int):
+        raise HTTPException(status_code=502, detail=f"Unexpected DevLake connection payload: {conn}")
+
+    try:
+        raw = client.list_remote_scopes(
+            plugin_name,
+            conn_id,
+            page=page,
+            page_size=page_size,
+            search_term=search_term,
+        )
+    finally:
+        client.delete_connection(plugin_name, conn_id, allow_not_found=True)
 
     scopes = []
     children = raw.get("children") or raw.get("scopes") or []
