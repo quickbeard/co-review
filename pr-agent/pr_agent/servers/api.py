@@ -434,11 +434,13 @@ def _sync_provider_to_devlake(
 
     if not integration.project_name:
         integration.project_name = f"{provider.type.value}-{provider.id}"
-    devlake_service.ensure_project_exists(
+    resolved_blueprint_id = devlake_service.ensure_project_exists(
         client,
         project_name=integration.project_name,
         provider=provider,
     )
+    if isinstance(resolved_blueprint_id, int):
+        integration.blueprint_id = resolved_blueprint_id
 
     integration.blueprint_id = devlake_service.apply_scope_selection_and_blueprint(
         client,
@@ -563,11 +565,13 @@ def upsert_devlake_integration(
     if not row.project_name:
         row.project_name = f"{provider.type.value}-{provider.id}"
     client = devlake_service.DevLakeClient(devlake_service.load_settings())
-    devlake_service.ensure_project_exists(
+    resolved_blueprint_id = devlake_service.ensure_project_exists(
         client,
         project_name=row.project_name,
         provider=provider,
     )
+    if isinstance(resolved_blueprint_id, int):
+        row.blueprint_id = resolved_blueprint_id
     row.blueprint_id = devlake_service.apply_scope_selection_and_blueprint(
         client,
         plugin_name=plugin_name,

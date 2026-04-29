@@ -175,6 +175,14 @@ class DevLakeClient:
             return body
         raise HTTPException(status_code=502, detail=f"Unexpected DevLake project payload: {raw}")
 
+    def get_project(self, project_name: str) -> dict[str, Any]:
+        encoded_name = parse.quote(project_name, safe="")
+        raw = self._request("GET", f"/projects/{encoded_name}")
+        body = self._unwrap_data(raw)
+        if isinstance(body, dict):
+            return body
+        raise HTTPException(status_code=502, detail=f"Unexpected DevLake project payload: {raw}")
+
     def delete_project(self, project_name: str, *, allow_not_found: bool = True) -> Any:
         encoded_name = parse.quote(project_name, safe="")
         return self._request(
@@ -338,17 +346,22 @@ def ensure_project_exists(
     *,
     project_name: str,
     provider: GitProvider,
-) -> None:
+) -> int | None:
     normalized_name = (project_name or "").strip()
     if not normalized_name:
         raise HTTPException(status_code=400, detail="project_name is required for DevLake project linkage")
 
     if client.project_exists(normalized_name):
-        return
+        project = client.get_project(normalized_name)
+    else:
+        provider_key = provider.type.value if hasattr(provider.type, "value") else str(provider.type)
+        description = f"Managed by PR-Agent for provider {provider_key}:{provider.id}"
+        project = client.create_project(normalized_name, description=description)
 
-    provider_key = provider.type.value if hasattr(provider.type, "value") else str(provider.type)
-    description = f"Managed by PR-Agent for provider {provider_key}:{provider.id}"
-    client.create_project(normalized_name, description=description)
+    blueprint = project.get("blueprint")
+    if isinstance(blueprint, dict) and isinstance(blueprint.get("id"), int):
+        return blueprint["id"]
+    return None
 
 
 def apply_scope_selection_and_blueprint(
@@ -357,9 +370,11 @@ def apply_scope_selection_and_blueprint(
     plugin_name: str,
     integration: DevLakeIntegration,
 ) -> int:
-    """Persist selected scopes and ensure blueprint reflects latest selection."""
+    """Persist selected scopes and patch the project-linked blueprint."""
     if not integration.connection_id:
         raise HTTPException(status_code=500, detail="Missing DevLake connection_id on integration row")
+    if not integration.blueprint_id:
+        raise HTTPException(status_code=500, detail="Missing DevLake blueprint_id on integration row")
 
     selected_scopes = list(integration.selected_scopes or [])
     client.put_scopes(plugin_name, integration.connection_id, selected_scopes)
@@ -368,12 +383,8 @@ def apply_scope_selection_and_blueprint(
         integration=integration,
         plugin_name=plugin_name,
     )
-    if integration.blueprint_id:
-        bp = client.patch_blueprint(integration.blueprint_id, payload)
-        bp_id = bp.get("id", integration.blueprint_id)
-    else:
-        bp = client.create_blueprint(payload)
-        bp_id = bp.get("id")
+    bp = client.patch_blueprint(integration.blueprint_id, payload)
+    bp_id = bp.get("id", integration.blueprint_id)
 
     if not isinstance(bp_id, int):
         raise HTTPException(status_code=502, detail=f"Unexpected DevLake blueprint payload: {bp}")
