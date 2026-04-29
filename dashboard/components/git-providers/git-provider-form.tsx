@@ -63,7 +63,7 @@ export function GitProviderForm({ provider, lang }: GitProviderFormProps) {
   const [showAccessToken, setShowAccessToken] = useState(false);
   const [showPrivateKey, setShowPrivateKey] = useState(false);
   const [showWebhookSecret, setShowWebhookSecret] = useState(false);
-  const [autoSyncOnCreate, setAutoSyncOnCreate] = useState(true);
+  const [autoSyncOnCreate, setAutoSyncOnCreate] = useState(false);
   const [autoSyncProjectName, setAutoSyncProjectName] = useState("");
 
   const showBaseUrl = selfHostedProviders.includes(selectedType);
@@ -438,19 +438,27 @@ export function GitProviderForm({ provider, lang }: GitProviderFormProps) {
             {dict.gitProviders.form.autoSyncOnCreate}
           </label>
           {autoSyncOnCreate && (
-            <div className="space-y-2">
-              <Label htmlFor="devlake-project-name">
-                {dict.gitProviders.form.autoSyncProjectName}
-              </Label>
-              <Input
-                id="devlake-project-name"
-                value={autoSyncProjectName}
-                onChange={(e) => setAutoSyncProjectName(e.target.value)}
-                placeholder={dict.gitProviders.form.autoSyncProjectNamePlaceholder}
-              />
-              <p className="text-xs text-muted-foreground">
-                {dict.gitProviders.form.autoSyncProjectNameHelp}
-              </p>
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="devlake-project-name">
+                  {dict.gitProviders.form.autoSyncProjectName}
+                </Label>
+                <Input
+                  id="devlake-project-name"
+                  value={autoSyncProjectName}
+                  onChange={(e) => setAutoSyncProjectName(e.target.value)}
+                  placeholder={dict.gitProviders.form.autoSyncProjectNamePlaceholder}
+                />
+                <p className="text-xs text-muted-foreground">
+                  {dict.gitProviders.form.autoSyncProjectNameHelp}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label>{dict.gitProviders.form.autoSyncScopes}</Label>
+                <div className="rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+                  {dict.gitProviders.form.autoSyncScopesLoadHint}
+                </div>
+              </div>
             </div>
           )}
         </div>

@@ -135,6 +135,8 @@
       "autoSyncProjectName": "DevLake project name for auto-sync",
       "autoSyncProjectNamePlaceholder": "Leave empty to use default (e.g., github-2)",
       "autoSyncProjectNameHelp": "If provided, auto-sync will use this DevLake project name on first setup.",
+      "autoSyncScopes": "Repository scopes for auto-sync",
+      "autoSyncScopesLoadHint": "Available repositories can be selected after the provider is created and DevLake connection is initialized.",
       "autoSyncDuplicateConnectionName": "Auto-sync failed because a DevLake connection with this name already exists. Use a different provider name or turn off auto-sync and configure DevLake manually.",
       "create": "Create Provider",
       "update": "Update Provider",
