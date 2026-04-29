@@ -630,24 +630,30 @@ def list_devlake_remote_scopes(
     session.add(row)
     session.commit()
 
-    raw = client.list_remote_scopes(
-        plugin_name,
-        row.connection_id,
-        page=page,
-        page_size=page_size,
-        search_term=search_term,
-    )
-
-    scopes = []
-    children = raw.get("children") or raw.get("scopes") or []
-    if isinstance(children, list):
-        for item in children:
-            if isinstance(item, dict):
-                scopes.append(item)
-
-    count = raw.get("count")
-    if not isinstance(count, int):
+    if plugin_name == "github":
+        scopes = devlake_service.collect_github_remote_scope_repositories_for_selection(
+            client,
+            row.connection_id,
+            search_term=search_term,
+        )
         count = len(scopes)
+    else:
+        raw = client.list_remote_scopes(
+            plugin_name,
+            row.connection_id,
+            page=page,
+            page_size=page_size,
+            search_term=search_term,
+        )
+        scopes = []
+        children = raw.get("children") or raw.get("scopes") or []
+        if isinstance(children, list):
+            for item in children:
+                if isinstance(item, dict):
+                    scopes.append(item)
+        count = raw.get("count")
+        if not isinstance(count, int):
+            count = len(scopes)
 
     return DevLakeRemoteScopesResponse(scopes=scopes, count=count)
 
@@ -677,26 +683,32 @@ def preview_devlake_remote_scopes(
         raise HTTPException(status_code=502, detail=f"Unexpected DevLake connection payload: {conn}")
 
     try:
-        raw = client.list_remote_scopes(
-            plugin_name,
-            conn_id,
-            page=page,
-            page_size=page_size,
-            search_term=search_term,
-        )
+        if plugin_name == "github":
+            scopes = devlake_service.collect_github_remote_scope_repositories_for_selection(
+                client,
+                conn_id,
+                search_term=search_term,
+            )
+            count = len(scopes)
+        else:
+            raw = client.list_remote_scopes(
+                plugin_name,
+                conn_id,
+                page=page,
+                page_size=page_size,
+                search_term=search_term,
+            )
+            scopes = []
+            children = raw.get("children") or raw.get("scopes") or []
+            if isinstance(children, list):
+                for item in children:
+                    if isinstance(item, dict):
+                        scopes.append(item)
+            count = raw.get("count")
+            if not isinstance(count, int):
+                count = len(scopes)
     finally:
         client.delete_connection(plugin_name, conn_id, allow_not_found=True)
-
-    scopes = []
-    children = raw.get("children") or raw.get("scopes") or []
-    if isinstance(children, list):
-        for item in children:
-            if isinstance(item, dict):
-                scopes.append(item)
-
-    count = raw.get("count")
-    if not isinstance(count, int):
-        count = len(scopes)
 
     return DevLakeRemoteScopesResponse(scopes=scopes, count=count)
 

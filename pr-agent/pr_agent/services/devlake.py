@@ -19,6 +19,66 @@ from fastapi import HTTPException
 
 from pr_agent.db import DevLakeIntegration, GitProvider
 
+# GitHub DevLake remote-scopes: groupId="" returns org/user *folders* only; repos come from
+# remote-scopes?groupId=<owner>. See apache/incubator-devlake backend/plugins/github/api/remote_api.go
+GITHUB_REMOTE_PREVIEW_MAX_REPOS = int(os.environ.get("DEVLAKE_GITHUB_REMOTE_PREVIEW_MAX_REPOS", "400"))
+GITHUB_REMOTE_PREVIEW_SEARCH_MAX_PAGES = int(os.environ.get("DEVLAKE_GITHUB_REMOTE_PREVIEW_SEARCH_MAX_PAGES", "30"))
+GITHUB_REMOTE_PREVIEW_OWNER_LIST_MAX_PAGES = int(os.environ.get("DEVLAKE_GITHUB_REMOTE_PREVIEW_OWNER_LIST_MAX_PAGES", "40"))
+
+
+def _normalize_remote_scope_payload(raw: Any) -> dict[str, Any]:
+    """Unwrap DevLake {data: {children,...}} and similar envelopes."""
+    if not isinstance(raw, dict):
+        return {}
+    nested = raw.get("data")
+    if isinstance(nested, dict) and ("children" in nested or "nextPageToken" in nested):
+        return nested
+    if "children" in raw or "nextPageToken" in raw:
+        return raw
+    inner = DevLakeClient._unwrap_data(raw)
+    return inner if isinstance(inner, dict) else {}
+
+
+def _github_remote_scope_entry_type(entry: dict[str, Any]) -> str:
+    t = entry.get("type")
+    return str(t).strip().lower() if isinstance(t, str) else ""
+
+
+def _github_owner_slug(entry: dict[str, Any]) -> str | None:
+    for key in ("id", "fullName", "name"):
+        v = entry.get(key)
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+    return None
+
+
+def _github_entry_looks_like_repository(entry: dict[str, Any]) -> bool:
+    if _github_remote_scope_entry_type(entry) == "scope":
+        return True
+    fn = entry.get("fullName")
+    if isinstance(fn, str) and "/" in fn:
+        return True
+    data = entry.get("data")
+    if isinstance(data, dict):
+        if data.get("fullName"):
+            return True
+        if data.get("githubId") is not None:
+            return True
+    return False
+
+
+def _normalize_github_remote_scope_entry(entry: dict[str, Any]) -> dict[str, Any]:
+    out = dict(entry)
+    data = out.get("data")
+    if isinstance(data, dict):
+        if out.get("fullName") is None and isinstance(data.get("fullName"), str):
+            out["fullName"] = data["fullName"]
+        if out.get("name") is None and isinstance(data.get("name"), str):
+            out["name"] = data["name"]
+    if out.get("scopeId") is None and out.get("id") is not None:
+        out["scopeId"] = str(out["id"])
+    return out
+
 
 def _env_bool(name: str, default: bool) -> bool:
     value = os.environ.get(name)
@@ -201,13 +261,53 @@ class DevLakeClient:
         search_term: str | None = None,
     ) -> dict[str, Any]:
         query: dict[str, Any] = {"page": page, "pageSize": page_size}
-        if search_term:
+        # GitHub uses groupId/pageToken pagination (see Swagger); remote-scopes does not use searchTerm.
+        if plugin_name != "github" and search_term:
             query["searchTerm"] = search_term
-        return self._request(
+        raw = self._request(
             "GET",
             f"/plugins/{plugin_name}/connections/{connection_id}/remote-scopes",
             query=query,
         )
+        return _normalize_remote_scope_payload(raw)
+
+    def github_remote_scope_page(
+        self,
+        connection_id: int,
+        *,
+        group_id: str | None = None,
+        page_token: str | None = None,
+    ) -> dict[str, Any]:
+        query: dict[str, Any] = {}
+        if group_id:
+            query["groupId"] = group_id
+        if page_token:
+            query["pageToken"] = page_token
+        raw = self._request(
+            "GET",
+            f"/plugins/github/connections/{connection_id}/remote-scopes",
+            query=query if query else None,
+        )
+        return _normalize_remote_scope_payload(raw)
+
+    def github_search_remote_scope_page(
+        self,
+        connection_id: int,
+        *,
+        search: str,
+        page: int = 1,
+        page_size: int = 100,
+    ) -> dict[str, Any]:
+        raw = self._request(
+            "GET",
+            f"/plugins/github/connections/{connection_id}/search-remote-scopes",
+            query={
+                "search": search.strip(),
+                "page": page,
+                "pageSize": page_size,
+            },
+        )
+        return _normalize_remote_scope_payload(raw)
 
     def put_scopes(self, plugin_name: str, connection_id: int, scopes: list[dict[str, Any]]) -> Any:
         return self._request(
@@ -241,6 +341,94 @@ class DevLakeClient:
             f"/blueprints/{blueprint_id}/trigger",
             payload={"fullSync": full_sync, "skipCollectors": skip_collectors},
         )
+
+
+def _next_remote_scope_page_token(body: dict[str, Any]) -> str | None:
+    tok = body.get("nextPageToken")
+    if isinstance(tok, str) and tok.strip():
+        return tok.strip()
+    return None
+
+
+def collect_github_remote_scope_repositories_for_selection(
+    client: DevLakeClient,
+    connection_id: int,
+    *,
+    search_term: str | None = None,
+    max_repos: int = GITHUB_REMOTE_PREVIEW_MAX_REPOS,
+) -> list[dict[str, Any]]:
+    """Enumerate GitHub repositories via DevLake remote API (groups first, then per-owner repos).
+
+    `/plugins/github/connections/{id}/scopes` GET lists *configured* repos on the connection, not discovery.
+    Discovery is `/remote-scopes` with optional `groupId` + pagination, per DevLake Swagger.
+    """
+    trimmed = (search_term or "").strip()
+    out: list[dict[str, Any]] = []
+    seen_key: set[str] = set()
+
+    def take_entry(entry: dict[str, Any]) -> None:
+        if not _github_entry_looks_like_repository(entry):
+            return
+        row = _normalize_github_remote_scope_entry(entry)
+        key = row.get("fullName") or row.get("scopeId") or str(row.get("id", ""))
+        if not isinstance(key, str) or not key:
+            return
+        if key in seen_key:
+            return
+        seen_key.add(key)
+        out.append(row)
+
+    if trimmed:
+        ps = min(100, max(1, max_repos))
+        for page in range(1, GITHUB_REMOTE_PREVIEW_SEARCH_MAX_PAGES + 1):
+            body = client.github_search_remote_scope_page(
+                connection_id, search=trimmed, page=page, page_size=ps
+            )
+            children = body.get("children") or []
+            for ch in children:
+                if isinstance(ch, dict):
+                    take_entry(ch)
+            if len(out) >= max_repos or len(children) < ps:
+                break
+        return out
+
+    owner_order: list[str] = []
+    seen_owners: set[str] = set()
+    pt: str | None = None
+    for _ in range(GITHUB_REMOTE_PREVIEW_OWNER_LIST_MAX_PAGES):
+        body = client.github_remote_scope_page(connection_id, group_id=None, page_token=pt)
+        batch = body.get("children") or []
+        for entry in batch:
+            if not isinstance(entry, dict):
+                continue
+            if _github_remote_scope_entry_type(entry) != "group":
+                continue
+            slug = _github_owner_slug(entry)
+            if slug and slug not in seen_owners:
+                seen_owners.add(slug)
+                owner_order.append(slug)
+        nxt = _next_remote_scope_page_token(body)
+        if not nxt:
+            break
+        pt = nxt
+
+    for oid in owner_order:
+        pg: str | None = None
+        while len(out) < max_repos:
+            body = client.github_remote_scope_page(connection_id, group_id=oid, page_token=pg)
+            for entry in body.get("children") or []:
+                if isinstance(entry, dict):
+                    take_entry(entry)
+            if len(out) >= max_repos:
+                return out
+            nxt = _next_remote_scope_page_token(body)
+            if not nxt:
+                break
+            pg = nxt
+        if len(out) >= max_repos:
+            break
+
+    return out
 
 
 def _normalize_devlake_rest_endpoint(endpoint: str) -> str:
