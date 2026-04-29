@@ -191,3 +191,44 @@ def test_cleanup_integration_resources_deletes_all(monkeypatch: pytest.MonkeyPat
         integration=integration,
     )
     assert called == {"bp": 77, "conn": 11, "proj": 1}
+
+
+def test_normalize_remote_scope_payload_unwraps_data_envelope():
+    from pr_agent.services.devlake import _normalize_remote_scope_payload
+
+    raw = {"success": True, "data": {"children": [{"type": "group", "id": "org1"}], "nextPageToken": ""}}
+    assert _normalize_remote_scope_payload(raw)["children"][0]["id"] == "org1"
+
+
+def test_collect_github_drills_remote_scopes_group_id(monkeypatch: pytest.MonkeyPatch):
+    from pr_agent.services.devlake import collect_github_remote_scope_repositories_for_selection
+
+    client = _client()
+
+    def fake_page(connection_id: int, *, group_id: str | None, page_token: str | None):
+        assert connection_id == 42
+        if group_id is None:
+            return {
+                "children": [{"type": "group", "id": "minhcong", "fullName": "minhcong"}],
+                "nextPageToken": "",
+            }
+        assert group_id == "minhcong"
+        return {
+            "children": [
+                {
+                    "type": "scope",
+                    "id": "100",
+                    "name": "foodhub",
+                    "fullName": "minhcong/foodhub",
+                    "data": {"fullName": "minhcong/foodhub", "githubId": 100},
+                }
+            ],
+            "nextPageToken": "",
+        }
+
+    monkeypatch.setattr(client, "github_remote_scope_page", fake_page)
+    monkeypatch.setattr(client, "github_search_remote_scope_page", lambda *a, **k: {})
+
+    scopes = collect_github_remote_scope_repositories_for_selection(client, 42)
+    assert len(scopes) == 1
+    assert scopes[0]["fullName"] == "minhcong/foodhub"
