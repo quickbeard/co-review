@@ -332,6 +332,34 @@ export async function listDevLakeRemoteScopes(
   }
 }
 
+export async function previewDevLakeRemoteScopes(
+  input: CreateGitProviderInput,
+): Promise<ApiResponse<DevLakeRemoteScopesResponse>> {
+  try {
+    const apiRequest = transformCreateInputToApiRequest(input);
+    const response = await fetch(
+      `${API_BASE_URL}/api/git-providers/devlake/remote-scopes/preview`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(apiRequest),
+      },
+    );
+    if (!response.ok) {
+      const error = await parseErrorResponse(response);
+      return {
+        success: false,
+        error: error.detail || error.message || "Failed to load remote scopes",
+      };
+    }
+    const data: DevLakeRemoteScopesResponse = await response.json();
+    return { success: true, data };
+  } catch (error) {
+    console.error("Failed to preview DevLake remote scopes:", error);
+    return { success: false, error: "Failed to connect to PR-Agent API" };
+  }
+}
+
 export async function enqueueDevLakeSync(
   providerId: number | string,
   input?: { fullSync?: boolean; skipCollectors?: boolean },

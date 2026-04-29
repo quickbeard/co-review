@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -15,8 +15,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useDictionary } from "@/lib/i18n/dictionary-context";
-import { createGitProvider, updateGitProvider } from "@/lib/api/git-providers";
+import {
+  createGitProvider,
+  enqueueDevLakeSync,
+  previewDevLakeRemoteScopes,
+  updateDevLakeIntegration,
+  updateGitProvider,
+} from "@/lib/api/git-providers";
 import type {
+  DevLakeRemoteScope,
   GitProvider,
   GitProviderType,
   GitHubDeploymentType,
@@ -48,6 +55,7 @@ export function GitProviderForm({ provider, lang }: GitProviderFormProps) {
   const dict = useDictionary();
   const router = useRouter();
   const isEdit = !!provider;
+  const formRef = useRef<HTMLFormElement>(null);
 
   const [pending, setPending] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -65,6 +73,9 @@ export function GitProviderForm({ provider, lang }: GitProviderFormProps) {
   const [showWebhookSecret, setShowWebhookSecret] = useState(false);
   const [autoSyncOnCreate, setAutoSyncOnCreate] = useState(false);
   const [autoSyncProjectName, setAutoSyncProjectName] = useState("");
+  const [loadingScopes, setLoadingScopes] = useState(false);
+  const [availableScopes, setAvailableScopes] = useState<DevLakeRemoteScope[]>([]);
+  const [selectedScopeIds, setSelectedScopeIds] = useState<Set<string>>(new Set());
 
   const showBaseUrl = selfHostedProviders.includes(selectedType);
   const isGitHub = selectedType === "github";
@@ -79,6 +90,60 @@ export function GitProviderForm({ provider, lang }: GitProviderFormProps) {
       return dict.gitProviders.form.autoSyncDuplicateConnectionName;
     }
     return rawError;
+  }
+
+  function toScopeId(scope: Record<string, unknown>): string | null {
+    const raw = scope.scopeId ?? scope.id;
+    if (raw === undefined || raw === null) return null;
+    return String(raw);
+  }
+
+  function toScopePayload(scope: DevLakeRemoteScope): Record<string, unknown> | null {
+    const scopeId = toScopeId(scope as Record<string, unknown>);
+    if (!scopeId) return null;
+    return {
+      scopeId,
+      name: typeof scope.name === "string" ? scope.name : undefined,
+      fullName: typeof scope.fullName === "string" ? scope.fullName : undefined,
+    };
+  }
+
+  async function loadPreviewScopes() {
+    if (isEdit || !formRef.current || !autoSyncOnCreate) return;
+    const formData = new FormData(formRef.current);
+    const name = String(formData.get("name") || "").trim();
+    const baseUrl = String(formData.get("baseUrl") || "").trim();
+    const accessToken = String(formData.get("accessToken") || "").trim();
+    const appId = String(formData.get("appId") || "").trim();
+    const privateKey = String(formData.get("privateKey") || "").trim();
+    const webhookSecret = String(formData.get("webhookSecret") || "").trim();
+
+    if (!name) {
+      setAvailableScopes([]);
+      setSelectedScopeIds(new Set());
+      return;
+    }
+
+    setLoadingScopes(true);
+    const result = await previewDevLakeRemoteScopes({
+      type: selectedType,
+      name,
+      baseUrl: baseUrl || undefined,
+      accessToken: accessToken || undefined,
+      deploymentType: isGitHub ? deploymentType : undefined,
+      appId: appId || undefined,
+      privateKey: privateKey || undefined,
+      webhookSecret: webhookSecret || undefined,
+    });
+    setLoadingScopes(false);
+
+    if (!result.success || !result.data) {
+      setAvailableScopes([]);
+      setSelectedScopeIds(new Set());
+      setError(toFriendlyError(result.error));
+      return;
+    }
+    setAvailableScopes(result.data.scopes || []);
   }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
@@ -103,7 +168,7 @@ export function GitProviderForm({ provider, lang }: GitProviderFormProps) {
           webhookSecret: (formData.get("webhookSecret") as string) || undefined,
         });
       } else {
-        result = await createGitProvider({
+        const createResult = await createGitProvider({
           type: formData.get("type") as GitProviderType,
           name: formData.get("name") as string,
           baseUrl: (formData.get("baseUrl") as string) || undefined,
@@ -112,10 +177,42 @@ export function GitProviderForm({ provider, lang }: GitProviderFormProps) {
           appId: (formData.get("appId") as string) || undefined,
           privateKey: (formData.get("privateKey") as string) || undefined,
           webhookSecret: (formData.get("webhookSecret") as string) || undefined,
-        }, {
-          autoSyncOnCreate,
-          devlakeProjectName: autoSyncOnCreate ? autoSyncProjectName : undefined,
-        });
+          },
+          {
+            // Create first, then apply selected scopes + trigger sync explicitly.
+            autoSyncOnCreate: false,
+          },
+        );
+        result = createResult;
+        if (
+          autoSyncOnCreate &&
+          createResult.success &&
+          createResult.data
+        ) {
+          const selectedScopesPayload = availableScopes
+            .filter((scope) => {
+              const scopeId = toScopeId(scope as Record<string, unknown>);
+              return scopeId ? selectedScopeIds.has(scopeId) : false;
+            })
+            .map(toScopePayload)
+            .filter((scope): scope is Record<string, unknown> => scope !== null);
+          const integrationResult = await updateDevLakeIntegration(createResult.data.id, {
+            enabled: true,
+            projectName: autoSyncProjectName || undefined,
+            selectedScopes: selectedScopesPayload,
+          });
+          if (!integrationResult.success) {
+            setError(toFriendlyError(integrationResult.error));
+            setPending(false);
+            return;
+          }
+          const syncResult = await enqueueDevLakeSync(createResult.data.id);
+          if (!syncResult.success) {
+            setError(toFriendlyError(syncResult.error));
+            setPending(false);
+            return;
+          }
+        }
       }
 
       if (!result.success) {
@@ -136,7 +233,7 @@ export function GitProviderForm({ provider, lang }: GitProviderFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
       {error && (
         <div className="rounded-md border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
           {error}
@@ -432,7 +529,17 @@ export function GitProviderForm({ provider, lang }: GitProviderFormProps) {
             <input
               type="checkbox"
               checked={autoSyncOnCreate}
-              onChange={(e) => setAutoSyncOnCreate(e.target.checked)}
+              onChange={(e) => {
+                const next = e.target.checked;
+                setAutoSyncOnCreate(next);
+                if (!next) {
+                  setAvailableScopes([]);
+                  setSelectedScopeIds(new Set());
+                  return;
+                }
+                setError(null);
+                void loadPreviewScopes();
+              }}
               className="h-4 w-4 rounded border-border text-primary"
             />
             {dict.gitProviders.form.autoSyncOnCreate}
@@ -455,8 +562,51 @@ export function GitProviderForm({ provider, lang }: GitProviderFormProps) {
               </div>
               <div className="space-y-2">
                 <Label>{dict.gitProviders.form.autoSyncScopes}</Label>
-                <div className="rounded-md border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
-                  {dict.gitProviders.form.autoSyncScopesLoadHint}
+                <div
+                  className="max-h-64 space-y-2 overflow-auto rounded-md border border-border bg-background px-3 py-2 text-sm"
+                >
+                  {loadingScopes && (
+                    <p className="text-muted-foreground">{dict.gitProviders.devlake.loadingScopes}</p>
+                  )}
+                  {!loadingScopes && availableScopes.length === 0 && (
+                    <p className="text-muted-foreground">{dict.gitProviders.devlake.noScopes}</p>
+                  )}
+                  {!loadingScopes &&
+                    availableScopes.map((scope) => {
+                      const scopeId = toScopeId(scope as Record<string, unknown>);
+                      if (!scopeId) return null;
+                      const label =
+                        (typeof scope.fullName === "string" && scope.fullName) ||
+                        (typeof scope.name === "string" && scope.name) ||
+                        scopeId;
+                      return (
+                        <label key={scopeId} className="flex items-center gap-2 text-foreground">
+                          <input
+                            type="checkbox"
+                            checked={selectedScopeIds.has(scopeId)}
+                            onChange={(event) => {
+                              const next = new Set(selectedScopeIds);
+                              if (event.target.checked) next.add(scopeId);
+                              else next.delete(scopeId);
+                              setSelectedScopeIds(next);
+                            }}
+                            className="h-4 w-4 rounded border-border text-primary"
+                          />
+                          <span>{label}</span>
+                        </label>
+                      );
+                    })}
+                </div>
+                <div className="flex">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void loadPreviewScopes()}
+                    disabled={pending || loadingScopes}
+                  >
+                    {dict.gitProviders.devlake.validate}
+                  </Button>
                 </div>
               </div>
             </div>
