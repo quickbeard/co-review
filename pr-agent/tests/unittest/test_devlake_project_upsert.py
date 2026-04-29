@@ -58,12 +58,13 @@ def test_ensure_project_exists_creates_when_missing(monkeypatch: pytest.MonkeyPa
         calls["create"] += 1
         assert name == "github-7"
         assert "provider github:7" in description
-        return {"name": name}
+        return {"name": name, "blueprint": {"id": 21}}
 
     monkeypatch.setattr(client, "project_exists", fake_exists)
     monkeypatch.setattr(client, "create_project", fake_create)
 
-    ensure_project_exists(client, project_name="github-7", provider=_provider())
+    blueprint_id = ensure_project_exists(client, project_name="github-7", provider=_provider())
+    assert blueprint_id == 21
     assert calls == {"exists": 1, "create": 1}
 
 
@@ -71,8 +72,10 @@ def test_ensure_project_exists_skips_when_present(monkeypatch: pytest.MonkeyPatc
     client = _client()
     monkeypatch.setattr(client, "project_exists", lambda name: True)
     monkeypatch.setattr(client, "create_project", lambda name, description: (_ for _ in ()).throw(AssertionError("must not create")))
+    monkeypatch.setattr(client, "get_project", lambda name: {"name": name, "blueprint": {"id": 22}})
 
-    ensure_project_exists(client, project_name="github-7", provider=_provider())
+    blueprint_id = ensure_project_exists(client, project_name="github-7", provider=_provider())
+    assert blueprint_id == 22
 
 
 def test_ensure_project_exists_rejects_empty_name():
@@ -88,11 +91,11 @@ def test_apply_scope_selection_and_blueprint_creates_when_missing(monkeypatch: p
     integration = DevLakeIntegration(
         git_provider_id=7,
         connection_id=11,
-        blueprint_id=None,
+        blueprint_id=99,
         project_name="github-7",
         selected_scopes=[{"scopeId": "1", "name": "org/repo"}],
     )
-    called = {"put": 0, "create": 0}
+    called = {"put": 0, "patch": 0}
 
     def fake_put(plugin_name: str, connection_id: int, scopes):
         called["put"] += 1
@@ -100,14 +103,9 @@ def test_apply_scope_selection_and_blueprint_creates_when_missing(monkeypatch: p
         assert connection_id == 11
         assert scopes == [{"scopeId": "1", "name": "org/repo"}]
 
-    def fake_create(payload):
-        called["create"] += 1
-        assert payload["projectName"] == "github-7"
-        return {"id": 99}
-
     monkeypatch.setattr(client, "put_scopes", fake_put)
-    monkeypatch.setattr(client, "create_blueprint", fake_create)
-    monkeypatch.setattr(client, "patch_blueprint", lambda blueprint_id, payload: {"id": blueprint_id})
+    monkeypatch.setattr(client, "create_blueprint", lambda payload: (_ for _ in ()).throw(AssertionError("must not create")))
+    monkeypatch.setattr(client, "patch_blueprint", lambda blueprint_id, payload: called.__setitem__("patch", called["patch"] + 1) or {"id": blueprint_id})
 
     bp_id = apply_scope_selection_and_blueprint(
         client,
@@ -115,7 +113,7 @@ def test_apply_scope_selection_and_blueprint_creates_when_missing(monkeypatch: p
         integration=integration,
     )
     assert bp_id == 99
-    assert called == {"put": 1, "create": 1}
+    assert called == {"put": 1, "patch": 1}
 
 
 def test_apply_scope_selection_and_blueprint_patches_existing(monkeypatch: pytest.MonkeyPatch):
@@ -148,6 +146,27 @@ def test_apply_scope_selection_and_blueprint_patches_existing(monkeypatch: pytes
     )
     assert bp_id == 77
     assert called == {"put": 1, "patch": 1}
+
+
+def test_apply_scope_selection_and_blueprint_requires_blueprint_id():
+    from pr_agent.db.models import DevLakeIntegration
+
+    client = _client()
+    integration = DevLakeIntegration(
+        git_provider_id=7,
+        connection_id=11,
+        blueprint_id=None,
+        project_name="github-7",
+        selected_scopes=[],
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        apply_scope_selection_and_blueprint(
+            client,
+            plugin_name="github",
+            integration=integration,
+        )
+    assert exc.value.status_code == 500
 
 
 def test_cleanup_integration_resources_deletes_all(monkeypatch: pytest.MonkeyPatch):
