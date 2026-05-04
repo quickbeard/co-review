@@ -31,8 +31,7 @@ interface WebhookFormProps {
   mode: "create" | "edit";
 }
 
-// Event presets per provider type. Mirrors the defaults the backend advertises
-// via GET /api/webhooks/endpoints; kept in sync there for initial population.
+/** Fallback when GET /api/webhooks/endpoints is slow, fails, or omits default_events. */
 const EVENT_PRESETS: Record<string, string[]> = {
   github: ["push", "pull_request", "issue_comment", "pull_request_review"],
   gitlab: ["push_events", "merge_requests_events", "note_events"],
@@ -90,11 +89,12 @@ export function WebhookForm({
       : providers.find((p) => p.id === providerId);
 
   const providerTypeKey = selectedProvider?.type ?? "";
-  const eventPresets = EVENT_PRESETS[providerTypeKey] ?? [];
 
   const suggestedEndpoint = endpoints.find(
     (e) => e.provider_type === providerTypeKey,
   );
+  const eventPresets =
+    suggestedEndpoint?.default_events ?? EVENT_PRESETS[providerTypeKey] ?? [];
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
