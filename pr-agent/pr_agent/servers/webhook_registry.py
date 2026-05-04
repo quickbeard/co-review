@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import secrets
 from abc import ABC, abstractmethod
-from datetime import datetime, timezone
+from datetime import timezone
 from typing import Any, Optional
 
 from pr_agent.db.models import (
@@ -244,44 +244,48 @@ class GitHubWebhookAdapter(WebhookAdapter):
             client.close()
 
     def list_deliveries(self, provider, registration, *, limit=30):
-        # PyGithub does not expose the /deliveries endpoint as a first-class
-        # helper, so we call it via the internal requester for a lightweight
-        # integration. Returning an empty list is an acceptable fallback when
-        # the endpoint is unavailable (GitHub Enterprise Server < 3.2).
+        """List recent webhook deliveries via ``Repository.get_hook_deliveries``.
+
+        Returns [] when the hook id is missing, when GitHub does not support
+        deliveries for this deployment (e.g. older GHES), or when the API call fails.
+        """
         if not registration.external_id:
             return []
+        from github import GithubException  # type: ignore
+
         owner, name = _split_repo(registration.repo)
         client = _github_client(provider)
+        hook_id = int(registration.external_id)
+        cap = min(max(limit, 1), 100)
         try:
-            path = (
-                f"/repos/{owner}/{name}/hooks/{registration.external_id}"
-                f"/deliveries?per_page={min(max(limit, 1), 100)}"
-            )
-            _, data = client._Github__requester.requestJson("GET", path)  # noqa: SLF001
-            import json as _json
-
-            try:
-                parsed = _json.loads(data) if isinstance(data, str) else data
-            except Exception:
-                parsed = []
-            if not isinstance(parsed, list):
-                return []
+            repo = client.get_repo(f"{owner}/{name}")
+            deliveries = repo.get_hook_deliveries(hook_id)
             out: list[WebhookDelivery] = []
-            for item in parsed[:limit]:
+            for delivery in deliveries:
+                if len(out) >= cap:
+                    break
+                delivered_at = delivery.delivered_at
+                if delivered_at is not None and delivered_at.tzinfo is not None:
+                    delivered_at = delivered_at.astimezone(timezone.utc)
                 out.append(
                     WebhookDelivery(
-                        id=str(item.get("id")),
-                        delivered_at=_parse_iso(item.get("delivered_at")),
-                        status=item.get("status"),
-                        status_code=item.get("status_code"),
-                        event=item.get("event"),
-                        action=item.get("action"),
-                        duration_ms=_to_float(item.get("duration")),
-                        redelivery=bool(item.get("redelivery", False)),
-                        url=item.get("url"),
+                        id=str(delivery.id),
+                        delivered_at=delivered_at,
+                        status=delivery.status,
+                        status_code=delivery.status_code,
+                        event=delivery.event,
+                        action=delivery.action,
+                        duration_ms=_to_float(delivery.duration),
+                        redelivery=bool(delivery.redelivery),
+                        url=delivery.url,
                     )
                 )
             return out
+        except GithubException as exc:
+            get_logger().warning(
+                f"list_deliveries failed for GitHub: {_github_error_message(exc)}"
+            )
+            return []
         except Exception as exc:  # noqa: BLE001
             get_logger().warning(f"list_deliveries failed for GitHub: {exc}")
             return []
@@ -303,18 +307,6 @@ def _github_error_message(exc) -> str:
         if msg:
             return msg
     return str(exc)
-
-
-def _parse_iso(value) -> Optional[datetime]:
-    if not value or not isinstance(value, str):
-        return None
-    try:
-        # GitHub returns RFC 3339 with trailing Z.
-        return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(
-            timezone.utc
-        )
-    except ValueError:
-        return None
 
 
 def _to_float(value) -> Optional[float]:
