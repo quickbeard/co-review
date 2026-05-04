@@ -28,9 +28,7 @@ export default async function EditWebhookPage({
     notFound();
   }
 
-  const providers = providersResult.success
-    ? (providersResult.data ?? [])
-    : [];
+  const providers = providersResult.success ? (providersResult.data ?? []) : [];
 
   return (
     <div className="space-y-6">

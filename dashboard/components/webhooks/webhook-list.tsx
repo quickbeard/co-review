@@ -54,9 +54,8 @@ export function WebhookList({ webhooks, providers, lang }: WebhookListProps) {
 
   const [busyId, setBusyId] = useState<number | null>(null);
   const [busyAction, setBusyAction] = useState<RowAction>(null);
-  const [deliveriesFor, setDeliveriesFor] = useState<WebhookRegistration | null>(
-    null,
-  );
+  const [deliveriesFor, setDeliveriesFor] =
+    useState<WebhookRegistration | null>(null);
 
   // Resolve provider label/type once per provider id so every row stays O(1).
   const providerLookup = new Map(providers.map((p) => [p.id, p]));
@@ -107,11 +106,7 @@ export function WebhookList({ webhooks, providers, lang }: WebhookListProps) {
   }
 
   function handleDelete(webhook: WebhookRegistration) {
-    if (
-      !confirm(
-        dict.webhooks.deleteConfirm.replace("{repo}", webhook.repo),
-      )
-    ) {
+    if (!confirm(dict.webhooks.deleteConfirm.replace("{repo}", webhook.repo))) {
       return;
     }
     return runRowAction(webhook.id, "delete", () => deleteWebhook(webhook.id));

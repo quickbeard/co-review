@@ -35,8 +35,17 @@ interface WebhookFormProps {
 const EVENT_PRESETS: Record<string, string[]> = {
   github: ["push", "pull_request", "issue_comment", "pull_request_review"],
   gitlab: ["push_events", "merge_requests_events", "note_events"],
-  bitbucket: ["pullrequest:created", "pullrequest:updated", "pullrequest:fulfilled"],
-  bitbucket_server: ["pr:opened", "pr:modified", "pr:merged", "pr:comment:added"],
+  bitbucket: [
+    "pullrequest:created",
+    "pullrequest:updated",
+    "pullrequest:fulfilled",
+  ],
+  bitbucket_server: [
+    "pr:opened",
+    "pr:modified",
+    "pr:merged",
+    "pr:comment:added",
+  ],
   gitea: ["pull_request", "push", "issues"],
   azure_devops: ["git.pullrequest.created", "git.pullrequest.updated"],
 };
@@ -84,9 +93,7 @@ export function WebhookForm({
   }, []);
 
   const selectedProvider =
-    providerId === ""
-      ? undefined
-      : providers.find((p) => p.id === providerId);
+    providerId === "" ? undefined : providers.find((p) => p.id === providerId);
 
   const providerTypeKey = selectedProvider?.type ?? "";
 

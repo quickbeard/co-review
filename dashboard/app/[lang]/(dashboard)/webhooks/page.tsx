@@ -29,9 +29,7 @@ export default async function WebhooksPage({
   ]);
 
   const webhooks = webhooksResult.success ? (webhooksResult.data ?? []) : [];
-  const providers = providersResult.success
-    ? (providersResult.data ?? [])
-    : [];
+  const providers = providersResult.success ? (providersResult.data ?? []) : [];
 
   return (
     <div className="space-y-6">
@@ -58,11 +56,7 @@ export default async function WebhooksPage({
         </div>
       )}
 
-      <WebhookList
-        webhooks={webhooks}
-        providers={providers}
-        lang={lang}
-      />
+      <WebhookList webhooks={webhooks} providers={providers} lang={lang} />
     </div>
   );
 }

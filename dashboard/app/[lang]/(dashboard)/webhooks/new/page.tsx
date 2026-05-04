@@ -18,9 +18,7 @@ export default async function NewWebhookPage({
 
   const dict = await getDictionary(lang);
   const providersResult = await getGitProviders();
-  const providers = providersResult.success
-    ? (providersResult.data ?? [])
-    : [];
+  const providers = providersResult.success ? (providersResult.data ?? []) : [];
 
   return (
     <div className="space-y-6">

@@ -262,12 +262,14 @@ export async function unregisterWebhook(
 
 export async function testWebhook(
   id: number | string,
-): Promise<ApiResponse<{ message: string | null; status_code: number | null }>> {
+): Promise<
+  ApiResponse<{ message: string | null; status_code: number | null }>
+> {
   try {
-    const response = await fetch(
-      `${API_BASE_URL}/api/webhooks/${id}/test`,
-      { method: "POST", headers: { "Content-Type": "application/json" } },
-    );
+    const response = await fetch(`${API_BASE_URL}/api/webhooks/${id}/test`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    });
     if (!response.ok) {
       const err = await parseErrorResponse(response);
       return {
@@ -320,14 +322,11 @@ export async function getWebhookEndpoints(): Promise<
   ApiResponse<WebhookEndpointInfo[]>
 > {
   try {
-    const response = await fetch(
-      `${API_BASE_URL}/api/webhooks/endpoints`,
-      {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-        cache: "no-store",
-      },
-    );
+    const response = await fetch(`${API_BASE_URL}/api/webhooks/endpoints`, {
+      method: "GET",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+    });
     if (!response.ok) {
       const err = await parseErrorResponse(response);
       return {
