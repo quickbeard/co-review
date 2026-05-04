@@ -21,6 +21,94 @@ services:
       timeout: 5s
       retries: 5
 
+  # Start with: docker compose --profile devlake up -d
+  devlake-mysql:
+    image: mysql:8
+    container_name: co-review-devlake-mysql
+    restart: unless-stopped
+    profiles:
+      - devlake
+    ports:
+      - "${DEVLAKE_MYSQL_HOST_PORT:-3306}:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DEVLAKE_MYSQL_ROOT_PASSWORD:-change_me_devlake_root}
+      MYSQL_DATABASE: ${DEVLAKE_MYSQL_DATABASE:-lake}
+      MYSQL_USER: ${DEVLAKE_MYSQL_USER:-merico}
+      MYSQL_PASSWORD: ${DEVLAKE_MYSQL_PASSWORD:-merico}
+      TZ: ${DEVLAKE_TZ:-UTC}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_bin
+      - --skip-log-bin
+    volumes:
+      - devlake_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-p${DEVLAKE_MYSQL_ROOT_PASSWORD:-change_me_devlake_root}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  devlake-grafana:
+    image: devlake.docker.scarf.sh/apache/devlake-dashboard:${DEVLAKE_VERSION:-v1.0.2-beta8}
+    container_name: co-review-devlake-grafana
+    restart: unless-stopped
+    profiles:
+      - devlake
+    environment:
+      GF_SERVER_ROOT_URL: ${DEVLAKE_GRAFANA_ROOT_URL:-http://localhost:30090/grafana}
+      GF_USERS_DEFAULT_THEME: ${DEVLAKE_GRAFANA_DEFAULT_THEME:-light}
+      GF_SECURITY_ADMIN_USER: ${DEVLAKE_GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${DEVLAKE_GRAFANA_ADMIN_PASSWORD:-change_me_grafana_admin}
+      MYSQL_URL: devlake-mysql:3306
+      MYSQL_DATABASE: ${DEVLAKE_MYSQL_DATABASE:-lake}
+      MYSQL_USER: ${DEVLAKE_MYSQL_USER:-merico}
+      MYSQL_PASSWORD: ${DEVLAKE_MYSQL_PASSWORD:-merico}
+      TZ: ${DEVLAKE_TZ:-UTC}
+    volumes:
+      - devlake_grafana_data:/var/lib/grafana
+      - ./devlake/grafana.ini:/etc/grafana/grafana.ini:ro
+    depends_on:
+      devlake-mysql:
+        condition: service_healthy
+
+  devlake:
+    image: devlake.docker.scarf.sh/apache/devlake:${DEVLAKE_VERSION:-v1.0.2-beta8}
+    container_name: co-review-devlake
+    restart: unless-stopped
+    profiles:
+      - devlake
+    env_file:
+      - ./.env
+    environment:
+      LOGGING_DIR: /app/logs
+      TZ: ${DEVLAKE_TZ:-UTC}
+    volumes:
+      - devlake_log:/app/logs
+    depends_on:
+      devlake-mysql:
+        condition: service_healthy
+
+  devlake-config-ui:
+    image: devlake.docker.scarf.sh/apache/devlake-config-ui:${DEVLAKE_VERSION:-v1.0.2-beta8}
+    container_name: co-review-devlake-config-ui
+    restart: unless-stopped
+    profiles:
+      - devlake
+    ports:
+      - "${DEVLAKE_UI_HOST_PORT:-30090}:4000"
+    env_file:
+      - ./.env
+    environment:
+      DEVLAKE_ENDPOINT: devlake:8080
+      GRAFANA_ENDPOINT: devlake-grafana:3000
+      TZ: ${DEVLAKE_TZ:-UTC}
+    depends_on:
+      devlake:
+        condition: service_started
+      devlake-grafana:
+        condition: service_started
+
   # =============================================================================
   # PR-Agent Services
   # =============================================================================
@@ -211,6 +299,9 @@ services:
 
 volumes:
   postgres_data:
+  devlake_mysql_data:
+  devlake_grafana_data:
+  devlake_log:
   # Named volume shared across every pr-agent service that reads or writes
   # Mem0/Chroma data. Without this each container had its own isolated
   # `.mem0/` directory and learnings never reached the webhook handlers.
