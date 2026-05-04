@@ -101,7 +101,7 @@ def test_apply_scope_selection_and_blueprint_creates_when_missing(monkeypatch: p
         called["put"] += 1
         assert plugin_name == "github"
         assert connection_id == 11
-        assert scopes == [{"scopeId": "1", "name": "org/repo"}]
+        assert scopes == [{"scopeId": "1", "name": "org/repo", "githubId": 1}]
 
     monkeypatch.setattr(client, "put_scopes", fake_put)
     monkeypatch.setattr(client, "create_blueprint", lambda payload: (_ for _ in ()).throw(AssertionError("must not create")))
