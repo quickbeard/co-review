@@ -322,14 +322,11 @@ export async function getWebhookEndpoints(): Promise<
   ApiResponse<WebhookEndpointInfo[]>
 > {
   try {
-    const response = await fetch(
-      `${API_BASE_URL}/api/webhooks/endpoints`,
-      {
-        method: "GET",
-        headers: { "Content-Type": "application/json" },
-        cache: "no-store",
-      },
-    );
+    const response = await fetch(`${API_BASE_URL}/api/webhooks/endpoints`, {
+      method: "GET",
+      headers: { "Content-Type": "application/json" },
+      cache: "no-store",
+    });
     if (!response.ok) {
       const err = await parseErrorResponse(response);
       return {
