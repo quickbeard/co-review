@@ -688,7 +688,8 @@ def apply_automation_config_to_settings() -> None:
 
 # TTL-cached refresh used by webhook handlers so dashboard changes take effect
 # without requiring a webhook-service restart.
-_last_refresh_at: float = 0.0
+# ``None`` means we have not refreshed yet — skip TTL so the first call always loads.
+_last_refresh_at: Optional[float] = None
 _refresh_lock = threading.Lock()
 
 
@@ -703,12 +704,18 @@ def ensure_postgres_config_loaded(ttl_seconds: float = 30.0) -> None:
 
     global _last_refresh_at
     now = time.monotonic()
-    if now - _last_refresh_at < ttl_seconds:
+    if (
+        _last_refresh_at is not None
+        and now - _last_refresh_at < ttl_seconds
+    ):
         return
 
     with _refresh_lock:
         now = time.monotonic()
-        if now - _last_refresh_at < ttl_seconds:
+        if (
+            _last_refresh_at is not None
+            and now - _last_refresh_at < ttl_seconds
+        ):
             return
         apply_postgres_credentials_to_config()
         _last_refresh_at = now
@@ -717,4 +724,4 @@ def ensure_postgres_config_loaded(ttl_seconds: float = 30.0) -> None:
 def invalidate_postgres_config_cache() -> None:
     """Force the next call to `ensure_postgres_config_loaded` to reload."""
     global _last_refresh_at
-    _last_refresh_at = 0.0
+    _last_refresh_at = None
