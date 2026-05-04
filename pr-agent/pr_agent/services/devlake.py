@@ -80,6 +80,60 @@ def _normalize_github_remote_scope_entry(entry: dict[str, Any]) -> dict[str, Any
     return out
 
 
+def _positive_int_github_id(value: Any) -> int | None:
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if value > 0 else None
+    if isinstance(value, float):
+        i = int(value)
+        return i if i > 0 else None
+    if isinstance(value, str) and value.strip().isdigit():
+        i = int(value.strip())
+        return i if i > 0 else None
+    return None
+
+
+def _infer_github_repository_numeric_id(scope: dict[str, Any]) -> int | None:
+    """Resolve DevLake/GH numeric repo id from UI or remote-scope rows."""
+    gid = _positive_int_github_id(scope.get("githubId"))
+    if gid is not None:
+        return gid
+    nested = scope.get("data") if isinstance(scope.get("data"), dict) else None
+    if nested:
+        gid = _positive_int_github_id(nested.get("githubId"))
+        if gid is not None:
+            return gid
+    for key in ("id", "scopeId"):
+        gid = _positive_int_github_id(scope.get(key))
+        if gid is not None:
+            return gid
+    return None
+
+
+def normalize_github_scope_for_put(scope: dict[str, Any]) -> dict[str, Any]:
+    """DevLake PUT /plugins/github/.../scopes requires GithubRepo.githubId (required)."""
+    row = _normalize_github_remote_scope_entry(dict(scope))
+    gid = _infer_github_repository_numeric_id(row)
+    if gid is None:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "GitHub scope is missing githubId. "
+                "Select repositories from the loaded list, or include data.githubId / a numeric scopeId."
+            ),
+        )
+    row["githubId"] = gid
+    nested = row.get("data")
+    if isinstance(nested, dict):
+        for key in ("cloneUrl", "HTMLUrl", "description", "ownerId"):
+            if row.get(key) is None and nested.get(key) is not None:
+                row[key] = nested[key]
+        if nested.get("githubId") is None:
+            nested["githubId"] = gid
+    return row
+
+
 def _env_bool(name: str, default: bool) -> bool:
     value = os.environ.get(name)
     if value is None:
@@ -565,6 +619,8 @@ def apply_scope_selection_and_blueprint(
         raise HTTPException(status_code=500, detail="Missing DevLake blueprint_id on integration row")
 
     selected_scopes = list(integration.selected_scopes or [])
+    if plugin_name == "github":
+        selected_scopes = [normalize_github_scope_for_put(dict(s)) for s in selected_scopes]
     client.put_scopes(plugin_name, integration.connection_id, selected_scopes)
 
     payload = build_blueprint_payload(
