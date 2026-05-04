@@ -1,4 +1,4 @@
-from .database import get_session, create_db_and_tables, engine
+from .database import create_db_and_tables, engine, get_session, init_database
 from .models import (
     # Enums
     GitProviderType,
@@ -27,12 +27,20 @@ from .models import (
     PRAgentConfigCreate,
     PRAgentConfigUpdate,
     PRAgentConfigPublic,
+    # Webhook registry models (P1)
+    WebhookDelivery,
+    WebhookRegistration,
+    WebhookRegistrationCreate,
+    WebhookRegistrationPublic,
+    WebhookRegistrationStatus,
+    WebhookRegistrationUpdate,
 )
 
 __all__ = [
     # Database
     "get_session",
     "create_db_and_tables",
+    "init_database",
     "engine",
     # Enums
     "GitProviderType",
@@ -61,4 +69,11 @@ __all__ = [
     "PRAgentConfigCreate",
     "PRAgentConfigUpdate",
     "PRAgentConfigPublic",
+    # Webhook registry
+    "WebhookDelivery",
+    "WebhookRegistration",
+    "WebhookRegistrationCreate",
+    "WebhookRegistrationPublic",
+    "WebhookRegistrationStatus",
+    "WebhookRegistrationUpdate",
 ]
