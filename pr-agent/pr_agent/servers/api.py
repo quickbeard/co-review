@@ -1783,7 +1783,7 @@ def list_webhook_endpoints() -> list[WebhookEndpointInfo]:
         WebhookEndpointInfo(
             provider_type=GitProviderType.gitlab.value,
             path=_full("/webhook"),
-            default_events=["Merge request events", "Push events", "Note events"],
+            default_events=["merge_requests_events", "push_events", "note_events"],
         ),
         WebhookEndpointInfo(
             provider_type=GitProviderType.bitbucket.value,
