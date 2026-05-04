@@ -4,9 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
+  BarChart3,
   GitBranch,
   Brain,
+  Lightbulb,
   Settings,
+  Zap,
+  Webhook,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -23,8 +27,12 @@ interface NavItem {
 
 const navigation: NavItem[] = [
   { nameKey: "overview", href: "/", icon: LayoutDashboard },
+  { nameKey: "analytics", href: "/analytics", icon: BarChart3 },
   { nameKey: "gitProviders", href: "/git-providers", icon: GitBranch },
   { nameKey: "llmProviders", href: "/llm-providers", icon: Brain },
+  { nameKey: "automation", href: "/automation", icon: Zap },
+  { nameKey: "webhooks", href: "/webhooks", icon: Webhook },
+  { nameKey: "learnings", href: "/learnings", icon: Lightbulb },
   { nameKey: "settings", href: "/settings", icon: Settings },
 ];
 

@@ -18,6 +18,8 @@ global_settings = Dynaconf(
     envvar_prefix=False,
     load_dotenv=False,  # Security: Don't load .env files
     settings_files=[join(current_dir, f) for f in [
+        ".pr_agent.toml",
+        "../.pr_agent.toml",
         "settings/configuration.toml",
         "settings/ignore.toml",
         "settings/generated_code_ignore.toml",
