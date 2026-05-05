@@ -576,6 +576,9 @@ def apply_postgres_credentials_to_config():
         # Apply automation config (per-provider pr_commands, push_commands, toggles).
         apply_automation_config_to_settings()
 
+        # Apply knowledge-base config (/learn flag, extraction rules, retrieval tuning).
+        apply_knowledge_base_config_to_settings()
+
     except Exception:
         # Silently fail - fall back to .secrets.toml
         pass
@@ -725,3 +728,95 @@ def invalidate_postgres_config_cache() -> None:
     """Force the next call to `ensure_postgres_config_loaded` to reload."""
     global _last_refresh_at
     _last_refresh_at = None
+
+
+# =============================================================================
+# Knowledge-base config (/learn flag, extraction rules, retrieval tuning).
+#
+# Lives in the `knowledge_base_config` JSON column of the default PRAgentConfig
+# row. The Dashboard writes this; `pr-agent` reads it here and overlays the
+# values on the `KNOWLEDGE_BASE.*` Dynaconf section so runtime code keeps
+# consulting a single source of truth (Dynaconf) even though the edits came
+# from the database.
+# =============================================================================
+
+# Keys we surface through the Dashboard. Anything else in the JSON blob is
+# ignored - we do not blindly forward keys to avoid clobbering infra-level
+# settings such as `chroma_path` or `embedding_model`.
+_KNOWLEDGE_BASE_ALLOWED_KEYS: tuple[str, ...] = (
+    "enabled",
+    "explicit_learn_enabled",
+    "learn_command",
+    "extraction_rules",
+    "apply_to_review",
+    "max_retrieved_learnings",
+    "max_summary_chars",
+    "duplicate_threshold",
+    "capture_from_pr_comments",
+    "require_agent_mention",
+)
+
+
+def _fetch_knowledge_base_config() -> Optional[dict[str, Any]]:
+    """Return the knowledge-base JSON dict from the default PRAgentConfig row.
+
+    Returns ``None`` when DB is not configured, engine is not initialised, or
+    no default config row exists. Returns an empty dict when the row exists
+    but the column is NULL (meaning "use TOML defaults").
+    """
+    provider = get_postgres_credential_provider()
+    provider._init_db()
+    if not provider._initialized or not provider._engine:
+        return None
+
+    try:
+        from sqlmodel import Session, select
+
+        from pr_agent.db.models import PRAgentConfig
+
+        with Session(provider._engine) as session:
+            statement = (
+                select(PRAgentConfig)
+                .where(PRAgentConfig.is_default == True)  # noqa: E712
+                .limit(1)
+            )
+            config = session.exec(statement).first()
+            if not config:
+                return None
+            return dict(config.knowledge_base_config or {})
+    except Exception:
+        return None
+
+
+def apply_knowledge_base_config_to_settings() -> None:
+    """Overlay DB-stored knowledge-base config onto Dynaconf's KNOWLEDGE_BASE.*
+
+    Only the allow-listed keys are written. Values that fail type coercion are
+    dropped silently so a malformed row never crashes webhook processing.
+    """
+    if not os.environ.get("DATABASE_URL"):
+        return
+
+    kb_config = _fetch_knowledge_base_config()
+    if kb_config is None:
+        return
+
+    try:
+        from pr_agent.config_loader import get_settings
+
+        settings = get_settings()
+        for key in _KNOWLEDGE_BASE_ALLOWED_KEYS:
+            if key not in kb_config:
+                continue
+            value = kb_config[key]
+            # Coerce list-ish values for extraction_rules so we never push a
+            # non-iterable into Dynaconf (defensive; the API validates too).
+            if key == "extraction_rules":
+                if value is None:
+                    value = []
+                elif not isinstance(value, (list, tuple)):
+                    continue
+                value = [str(v) for v in value if isinstance(v, str)]
+            settings.set(f"KNOWLEDGE_BASE.{key.upper()}", value)
+    except Exception:
+        pass

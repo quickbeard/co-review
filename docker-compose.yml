@@ -21,6 +21,94 @@ services:
       timeout: 5s
       retries: 5
 
+  # Start with: docker compose --profile devlake up -d
+  devlake-mysql:
+    image: mysql:8
+    container_name: co-review-devlake-mysql
+    restart: unless-stopped
+    profiles:
+      - devlake
+    ports:
+      - "${DEVLAKE_MYSQL_HOST_PORT:-3306}:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DEVLAKE_MYSQL_ROOT_PASSWORD:-change_me_devlake_root}
+      MYSQL_DATABASE: ${DEVLAKE_MYSQL_DATABASE:-lake}
+      MYSQL_USER: ${DEVLAKE_MYSQL_USER:-merico}
+      MYSQL_PASSWORD: ${DEVLAKE_MYSQL_PASSWORD:-merico}
+      TZ: ${DEVLAKE_TZ:-UTC}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_bin
+      - --skip-log-bin
+    volumes:
+      - devlake_mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-p${DEVLAKE_MYSQL_ROOT_PASSWORD:-change_me_devlake_root}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  devlake-grafana:
+    image: devlake.docker.scarf.sh/apache/devlake-dashboard:${DEVLAKE_VERSION:-v1.0.2-beta8}
+    container_name: co-review-devlake-grafana
+    restart: unless-stopped
+    profiles:
+      - devlake
+    environment:
+      GF_SERVER_ROOT_URL: ${DEVLAKE_GRAFANA_ROOT_URL:-http://localhost:30090/grafana}
+      GF_USERS_DEFAULT_THEME: ${DEVLAKE_GRAFANA_DEFAULT_THEME:-light}
+      GF_SECURITY_ADMIN_USER: ${DEVLAKE_GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${DEVLAKE_GRAFANA_ADMIN_PASSWORD:-change_me_grafana_admin}
+      MYSQL_URL: devlake-mysql:3306
+      MYSQL_DATABASE: ${DEVLAKE_MYSQL_DATABASE:-lake}
+      MYSQL_USER: ${DEVLAKE_MYSQL_USER:-merico}
+      MYSQL_PASSWORD: ${DEVLAKE_MYSQL_PASSWORD:-merico}
+      TZ: ${DEVLAKE_TZ:-UTC}
+    volumes:
+      - devlake_grafana_data:/var/lib/grafana
+      - ./devlake/grafana.ini:/etc/grafana/grafana.ini:ro
+    depends_on:
+      devlake-mysql:
+        condition: service_healthy
+
+  devlake:
+    image: devlake.docker.scarf.sh/apache/devlake:${DEVLAKE_VERSION:-v1.0.2-beta8}
+    container_name: co-review-devlake
+    restart: unless-stopped
+    profiles:
+      - devlake
+    env_file:
+      - ./.env
+    environment:
+      LOGGING_DIR: /app/logs
+      TZ: ${DEVLAKE_TZ:-UTC}
+    volumes:
+      - devlake_log:/app/logs
+    depends_on:
+      devlake-mysql:
+        condition: service_healthy
+
+  devlake-config-ui:
+    image: devlake.docker.scarf.sh/apache/devlake-config-ui:${DEVLAKE_VERSION:-v1.0.2-beta8}
+    container_name: co-review-devlake-config-ui
+    restart: unless-stopped
+    profiles:
+      - devlake
+    ports:
+      - "${DEVLAKE_UI_HOST_PORT:-30090}:4000"
+    env_file:
+      - ./.env
+    environment:
+      DEVLAKE_ENDPOINT: devlake:8080
+      GRAFANA_ENDPOINT: devlake-grafana:3000
+      TZ: ${DEVLAKE_TZ:-UTC}
+    depends_on:
+      devlake:
+        condition: service_started
+      devlake-grafana:
+        condition: service_started
+
   # =============================================================================
   # PR-Agent Services
   # =============================================================================
@@ -38,8 +126,36 @@ services:
       DATABASE_URL: ${DATABASE_URL}
       API_HOST: "0.0.0.0"
       API_PORT: "3001"
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL}
+      # DevLake API endpoint + auth settings used by backend integration.
+      DEVLAKE_API_BASE_URL: ${DEVLAKE_API_BASE_URL}
+      DEVLAKE_API_PREFIX: ${DEVLAKE_API_PREFIX:-/api}
+      DEVLAKE_API_TOKEN: ${DEVLAKE_API_TOKEN:-}
+      DEVLAKE_API_AUTH_HEADER: ${DEVLAKE_API_AUTH_HEADER:-Authorization}
+      DEVLAKE_API_AUTH_SCHEME: ${DEVLAKE_API_AUTH_SCHEME:-Bearer}
+      DEVLAKE_API_TIMEOUT_SEC: ${DEVLAKE_API_TIMEOUT_SEC:-30}
+      DEVLAKE_API_VERIFY_TLS: ${DEVLAKE_API_VERIFY_TLS:-true}
+      KNOWLEDGE_BASE__ENABLED: "true"
+      KNOWLEDGE_BASE__PROVIDER: "mem0"
+      KNOWLEDGE_BASE__CHROMA_PATH: "/app/.mem0/chroma"
+      KNOWLEDGE_BASE__CAPTURE_FROM_PR_COMMENTS: "true"
+      KNOWLEDGE_BASE__APPLY_TO_REVIEW: "true"
+      KNOWLEDGE_BASE__REQUIRE_AGENT_MENTION: "true"
+      KNOWLEDGE_BASE__MAX_RETRIEVED_LEARNINGS: "5"
+      # KNOWLEDGE_BASE__EMBEDDING_MODEL: "text-embedding-3-small"
+      KNOWLEDGE_BASE__EMBEDDING_MODEL: "BAAI/bge-m3"
+      # Mem0 talks to the gateway via the raw OpenAI SDK, so the model name
+      # must match the gateway's allowlist verbatim (including any `openai/`
+      # prefix). Keep this decoupled from [config].model because pr-agent's
+      # main path uses LiteLLM and can use a prefix-less name there.
+      KNOWLEDGE_BASE__LLM_MODEL: "openai/gpt-oss-120b:netmind"
     volumes:
+      - ./pr-agent/.pr_agent.toml:/app/.pr_agent.toml:ro
       - ./pr-agent/pr_agent/settings/.secrets.toml:/app/pr_agent/settings/.secrets.toml:ro
+      # Shared Mem0/Chroma store so the API, webhook handlers, and the
+      # refinement worker all read/write the same learning index.
+      - mem0_data:/app/.mem0
     depends_on:
       postgres:
         condition: service_healthy
@@ -49,7 +165,7 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
-    command: ["python", "-m", "pr_agent.servers.api"]
+    entrypoint: ["python", "-m", "pr_agent.servers.api"]
 
   # GitHub webhook handler (optional - enable if using GitHub App)
   pr-agent-github:
@@ -65,12 +181,28 @@ services:
     environment:
       PORT: "3000"
       DATABASE_URL: ${DATABASE_URL}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL}
+      # Knowledge-base knobs must match pr-agent-api so the webhook handler
+      # embeds with the same model/gateway and writes into the same Chroma
+      # collection that the dashboard and worker read from.
+      KNOWLEDGE_BASE__ENABLED: "true"
+      KNOWLEDGE_BASE__PROVIDER: "mem0"
+      KNOWLEDGE_BASE__CHROMA_PATH: "/app/.mem0/chroma"
+      KNOWLEDGE_BASE__CAPTURE_FROM_PR_COMMENTS: "true"
+      KNOWLEDGE_BASE__APPLY_TO_REVIEW: "true"
+      KNOWLEDGE_BASE__REQUIRE_AGENT_MENTION: "true"
+      KNOWLEDGE_BASE__MAX_RETRIEVED_LEARNINGS: "5"
+      KNOWLEDGE_BASE__EMBEDDING_MODEL: "BAAI/bge-m3"
+      KNOWLEDGE_BASE__LLM_MODEL: "openai/gpt-oss-120b:netmind"
     volumes:
+      - ./pr-agent/.pr_agent.toml:/app/.pr_agent.toml:ro
       - ./pr-agent/pr_agent/settings/.secrets.toml:/app/pr_agent/settings/.secrets.toml:ro
+      - mem0_data:/app/.mem0
     depends_on:
       postgres:
         condition: service_healthy
-    command: ["python", "-m", "pr_agent.servers.github_app"]
+    entrypoint: ["python", "-m", "pr_agent.servers.github_app"]
 
   # GitLab webhook handler (optional - enable if using GitLab)
   pr-agent-gitlab:
@@ -86,12 +218,56 @@ services:
     environment:
       PORT: "3000"
       DATABASE_URL: ${DATABASE_URL}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL}
+      KNOWLEDGE_BASE__ENABLED: "true"
+      KNOWLEDGE_BASE__PROVIDER: "mem0"
+      KNOWLEDGE_BASE__CHROMA_PATH: "/app/.mem0/chroma"
+      KNOWLEDGE_BASE__CAPTURE_FROM_PR_COMMENTS: "true"
+      KNOWLEDGE_BASE__APPLY_TO_REVIEW: "true"
+      KNOWLEDGE_BASE__REQUIRE_AGENT_MENTION: "true"
+      KNOWLEDGE_BASE__MAX_RETRIEVED_LEARNINGS: "5"
+      KNOWLEDGE_BASE__EMBEDDING_MODEL: "BAAI/bge-m3"
+      KNOWLEDGE_BASE__LLM_MODEL: "openai/gpt-oss-120b:netmind"
     volumes:
+      - ./pr-agent/.pr_agent.toml:/app/.pr_agent.toml:ro
       - ./pr-agent/pr_agent/settings/.secrets.toml:/app/pr_agent/settings/.secrets.toml:ro
+      - mem0_data:/app/.mem0
     depends_on:
       postgres:
         condition: service_healthy
-    command: ["python", "-m", "pr_agent.servers.gitlab_webhook"]
+    entrypoint: ["python", "-m", "pr_agent.servers.gitlab_webhook"]
+
+  # Background worker that refines raw /learn captures via LLM.
+  # Shares the mem0_data volume so refinements land in the same Chroma store
+  # the API and webhook handlers read from.
+  pr-agent-worker:
+    build:
+      context: ./pr-agent
+      dockerfile: docker/Dockerfile
+    container_name: co-review-pr-agent-worker
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL}
+      # Kept in sync with pr-agent-api so the worker reaches the same Chroma
+      # location even if someone overrides KNOWLEDGE_BASE__CHROMA_PATH there.
+      KNOWLEDGE_BASE__ENABLED: "true"
+      KNOWLEDGE_BASE__PROVIDER: "mem0"
+      KNOWLEDGE_BASE__CHROMA_PATH: "/app/.mem0/chroma"
+      KNOWLEDGE_BASE__EMBEDDING_MODEL: "BAAI/bge-m3"
+      KNOWLEDGE_BASE__LLM_MODEL: "openai/gpt-oss-120b:netmind"
+    volumes:
+      - ./pr-agent/.pr_agent.toml:/app/.pr_agent.toml:ro
+      - ./pr-agent/pr_agent/settings/.secrets.toml:/app/pr_agent/settings/.secrets.toml:ro
+      - mem0_data:/app/.mem0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      pr-agent-api:
+        condition: service_healthy
+    entrypoint: ["python", "-m", "pr_agent.workers.refinement"]
 
   # =============================================================================
   # Dashboard
@@ -108,6 +284,9 @@ services:
     environment:
       NODE_ENV: production
       NEXT_PUBLIC_PR_AGENT_API_URL: http://pr-agent-api:3001
+      # Embed URL of the Apache DevLake Grafana dashboard.
+      # Leave unset to hide the embed and show a setup hint instead.
+      NEXT_PUBLIC_DEVLAKE_GRAFANA_URL: ${NEXT_PUBLIC_DEVLAKE_GRAFANA_URL:-}
     depends_on:
       pr-agent-api:
         condition: service_healthy
@@ -120,3 +299,10 @@ services:
 
 volumes:
   postgres_data:
+  devlake_mysql_data:
+  devlake_grafana_data:
+  devlake_log:
+  # Named volume shared across every pr-agent service that reads or writes
+  # Mem0/Chroma data. Without this each container had its own isolated
+  # `.mem0/` directory and learnings never reached the webhook handlers.
+  mem0_data:

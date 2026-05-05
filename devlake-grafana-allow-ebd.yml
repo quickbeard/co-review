@@ -1,0 +1,18 @@
+mysql:
+  service:
+    type: LoadBalancer
+grafana:
+  grafana.ini:
+    # Required for iframe embed from another origin (e.g. Next on :3000, Grafana on :30090).
+    # Without this, Grafana sends X-Frame-Options: deny and the browser blocks the iframe.
+    security:
+      allow_embedding: true
+    auth.anonymous:
+      enabled: true
+      # The organization to use for anonymous users (default is "Main Org.")
+      org_name: "Main Org."
+      # Role for unauthenticated users; "Viewer" is recommended for security
+      org_role: Viewer
+    # Optional: Hide the login form if you only want anonymous access
+    auth:
+      disable_login_form: false

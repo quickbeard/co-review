@@ -16,7 +16,10 @@ Supported providers
 """
 from __future__ import annotations
 
+import importlib
 import secrets
+from datetime import datetime
+from urllib.parse import quote_plus
 from abc import ABC, abstractmethod
 from datetime import timezone
 from typing import Any, Optional
@@ -319,6 +322,276 @@ def _to_float(value) -> Optional[float]:
 
 
 # ---------------------------------------------------------------------------
+# GitLab adapter (python-gitlab)
+# ---------------------------------------------------------------------------
+
+_GITLAB_DEFAULT_EVENTS: tuple[str, ...] = (
+    "push_events",
+    "merge_requests_events",
+    "note_events",
+)
+
+_GITLAB_EVENT_ALIASES: dict[str, str] = {
+    "push": "push_events",
+    "push_events": "push_events",
+    "push event": "push_events",
+    "push events": "push_events",
+    "tag_push": "tag_push_events",
+    "tag_push_events": "tag_push_events",
+    "tag push event": "tag_push_events",
+    "tag push events": "tag_push_events",
+    "merge_request": "merge_requests_events",
+    "merge_requests": "merge_requests_events",
+    "merge request": "merge_requests_events",
+    "merge request event": "merge_requests_events",
+    "merge request events": "merge_requests_events",
+    "merge_requests_events": "merge_requests_events",
+    "note": "note_events",
+    "notes": "note_events",
+    "note_events": "note_events",
+    "note event": "note_events",
+    "note events": "note_events",
+    "comment": "note_events",
+    "comments": "note_events",
+    "issues": "issues_events",
+    "issues_events": "issues_events",
+    "issue event": "issues_events",
+    "issue events": "issues_events",
+    "confidential_issues_events": "confidential_issues_events",
+    "wiki_page_events": "wiki_page_events",
+    "wiki page event": "wiki_page_events",
+    "wiki page events": "wiki_page_events",
+    "deployment_events": "deployment_events",
+    "deployment event": "deployment_events",
+    "deployment events": "deployment_events",
+    "job_events": "job_events",
+    "job event": "job_events",
+    "job events": "job_events",
+    "pipeline_events": "pipeline_events",
+    "pipeline event": "pipeline_events",
+    "pipeline events": "pipeline_events",
+    "releases_events": "releases_events",
+    "release event": "releases_events",
+    "release events": "releases_events",
+}
+
+
+def _normalize_gitlab_event_key(event: str) -> Optional[str]:
+    key = event.strip().lower().replace("-", "_")
+    key = " ".join(key.split())
+    if key in _GITLAB_EVENT_ALIASES:
+        return _GITLAB_EVENT_ALIASES[key]
+    compact = key.replace(" ", "_")
+    if compact in _GITLAB_EVENT_ALIASES:
+        return _GITLAB_EVENT_ALIASES[compact]
+    return None
+
+
+def _normalize_gitlab_events(events: Optional[list[str]]) -> list[str]:
+    if not events:
+        return list(_GITLAB_DEFAULT_EVENTS)
+    normalized: list[str] = []
+    for event in events:
+        mapped = _normalize_gitlab_event_key(event)
+        if mapped and mapped not in normalized:
+            normalized.append(mapped)
+    return normalized or list(_GITLAB_DEFAULT_EVENTS)
+
+
+def _gitlab_client(provider: GitProvider):
+    if not provider.access_token:
+        raise WebhookRegistryError(
+            "GitLab provider has no access_token set", status_code=400
+        )
+    gitlab = importlib.import_module("gitlab")
+    return gitlab.Gitlab(
+        url=provider.base_url or "https://gitlab.com",
+        private_token=provider.access_token,
+    )
+
+
+def _gitlab_project(client, repo: str):
+    if "/" not in repo and not repo.isdigit():
+        raise WebhookRegistryError(
+            f"GitLab repo must be a numeric project id or 'group/project', got: {repo!r}",
+            status_code=400,
+        )
+    try:
+        # Support both "group/project" and URL-encoded "group%2Fproject".
+        if repo.isdigit():
+            return client.projects.get(int(repo))
+        try:
+            return client.projects.get(repo)
+        except Exception:
+            return client.projects.get(quote_plus(repo))
+    except Exception as exc:  # noqa: BLE001
+        raise WebhookRegistryError(
+            f"Unable to resolve GitLab project '{repo}': {exc}",
+            status_code=404,
+        ) from exc
+
+
+def _parse_gitlab_datetime(value: Any) -> Optional[datetime]:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    raw = value.strip()
+    try:
+        if raw.endswith("Z"):
+            raw = raw[:-1] + "+00:00"
+        dt = datetime.fromisoformat(raw)
+        if dt.tzinfo is None:
+            return dt.replace(tzinfo=timezone.utc)
+        return dt.astimezone(timezone.utc)
+    except ValueError:
+        return None
+
+
+class GitLabWebhookAdapter(WebhookAdapter):
+    """GitLab webhook management via python-gitlab."""
+
+    def register(self, provider, registration):
+        client = _gitlab_client(provider)
+        try:
+            project = _gitlab_project(client, registration.repo)
+            payload: dict[str, Any] = {
+                "url": registration.target_url,
+                "enable_ssl_verification": not bool(registration.insecure_ssl),
+            }
+            if registration.secret:
+                payload["token"] = registration.secret
+            for event in _normalize_gitlab_events(registration.events):
+                payload[event] = True
+
+            hook = project.hooks.create(payload)
+            hook_id = getattr(hook, "id", None)
+            return RegistrationResult(
+                external_id=str(hook_id) if hook_id is not None else None,
+                status_code=201,
+                message="Webhook created on GitLab",
+                raw=getattr(hook, "attributes", {}) or {},
+            )
+        except WebhookRegistryError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            raise WebhookRegistryError(
+                f"Failed to register GitLab webhook: {exc}", status_code=502
+            ) from exc
+
+    def unregister(self, provider, registration):
+        if not registration.external_id:
+            return RegistrationResult(message="No external_id to unregister")
+
+        client = _gitlab_client(provider)
+        try:
+            project = _gitlab_project(client, registration.repo)
+            project.hooks.delete(int(registration.external_id))
+            return RegistrationResult(
+                status_code=204, message="Webhook deleted on GitLab"
+            )
+        except WebhookRegistryError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            # GitLab returns 404 when hook was already deleted; treat as success.
+            status = getattr(exc, "response_code", None)
+            if status == 404:
+                return RegistrationResult(
+                    status_code=404, message="Webhook already absent on GitLab"
+                )
+            raise WebhookRegistryError(
+                f"Failed to unregister GitLab webhook: {exc}",
+                status_code=status or 502,
+            ) from exc
+
+    def test(self, provider, registration):
+        if not registration.external_id:
+            raise WebhookRegistryError(
+                "Webhook must be registered before it can be tested",
+                status_code=400,
+            )
+
+        client = _gitlab_client(provider)
+        try:
+            project = _gitlab_project(client, registration.repo)
+            trigger = _normalize_gitlab_events(registration.events)[0]
+            endpoint = (
+                f"/projects/{project.encoded_id}/hooks/{int(registration.external_id)}"
+                f"/test/{trigger}"
+            )
+            # Some GitLab versions don't expose this API yet; we degrade
+            # gracefully to avoid blocking operators from storing webhooks.
+            try:
+                client.http_post(endpoint)
+                return RegistrationResult(
+                    status_code=201, message=f"Test delivery dispatched ({trigger})"
+                )
+            except Exception as exc:  # noqa: BLE001
+                status = getattr(exc, "response_code", None)
+                if status in (404, 405):
+                    return RegistrationResult(
+                        status_code=202,
+                        message=(
+                            "Test trigger endpoint is unavailable on this GitLab version; "
+                            "send a real event to validate deliveries."
+                        ),
+                    )
+                raise
+        except WebhookRegistryError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            status = getattr(exc, "response_code", None)
+            raise WebhookRegistryError(
+                f"Failed to trigger GitLab webhook test: {exc}",
+                status_code=status or 502,
+            ) from exc
+
+    def list_deliveries(self, provider, registration, *, limit=30):
+        if not registration.external_id:
+            return []
+
+        client = _gitlab_client(provider)
+        cap = min(max(limit, 1), 100)
+        try:
+            project = _gitlab_project(client, registration.repo)
+            endpoint = f"/projects/{project.encoded_id}/hooks/{int(registration.external_id)}/events"
+            raw = client.http_get(endpoint, query_data={"per_page": cap})
+
+            rows: list[dict[str, Any]]
+            if isinstance(raw, list):
+                rows = [r for r in raw if isinstance(r, dict)]
+            elif isinstance(raw, dict):
+                rows = [r for r in raw.get("events", []) if isinstance(r, dict)]
+            else:
+                return []
+
+            out: list[WebhookDelivery] = []
+            for item in rows[:cap]:
+                status = item.get("status")
+                status_code = item.get("response_status") or item.get("status_code")
+                event = item.get("trigger") or item.get("event_name")
+                delivered_at = _parse_gitlab_datetime(
+                    item.get("created_at") or item.get("execution_timestamp")
+                )
+                out.append(
+                    WebhookDelivery(
+                        id=str(item.get("id") or item.get("request_id") or ""),
+                        delivered_at=delivered_at,
+                        status=status if isinstance(status, str) else None,
+                        status_code=status_code if isinstance(status_code, int) else None,
+                        event=event if isinstance(event, str) else None,
+                        duration_ms=_to_float(
+                            item.get("execution_duration") or item.get("duration")
+                        ),
+                        redelivery=bool(item.get("redelivery") or item.get("retries", 0) > 0),
+                        url=item.get("url") if isinstance(item.get("url"), str) else None,
+                    )
+                )
+            return out
+        except Exception as exc:  # noqa: BLE001
+            get_logger().warning(f"list_deliveries failed for GitLab: {exc}")
+            return []
+
+
+# ---------------------------------------------------------------------------
 # Stub adapter for unsupported providers
 # ---------------------------------------------------------------------------
 
@@ -356,6 +629,7 @@ class UnsupportedWebhookAdapter(WebhookAdapter):
 
 _ADAPTERS: dict[GitProviderType, type[WebhookAdapter]] = {
     GitProviderType.github: GitHubWebhookAdapter,
+    GitProviderType.gitlab: GitLabWebhookAdapter,
 }
 
 

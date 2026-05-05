@@ -1,11 +1,16 @@
 export const dynamic = "force-dynamic";
 
-import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
-import { getDictionary } from "@/app/dictionaries";
-import { hasLocale } from "@/lib/i18n/config";
+// "Credentials" tab under /git-providers/{id}/. The page-level header, back
+// link, and the tab strip are rendered by the shared layout above; this
+// route owns just the edit form.
+
 import { notFound } from "next/navigation";
-import { GitProviderForm } from "@/components/git-providers";
+
+import {
+  DevLakeIntegrationPanel,
+  GitProviderForm,
+} from "@/components/git-providers";
+import { hasLocale } from "@/lib/i18n/config";
 import { getGitProvider } from "@/lib/api/git-providers";
 
 export default async function EditGitProviderPage({
@@ -14,40 +19,20 @@ export default async function EditGitProviderPage({
   params: Promise<{ lang: string; id: string }>;
 }) {
   const { lang, id } = await params;
+  if (!hasLocale(lang)) notFound();
 
-  if (!hasLocale(lang)) {
-    notFound();
-  }
-
-  const dict = await getDictionary(lang);
   const result = await getGitProvider(id);
-
   if (!result.success || !result.data) {
     notFound();
   }
 
-  const provider = result.data;
-
   return (
     <div className="space-y-6">
-      <div>
-        <Link
-          href={`/${lang}/git-providers`}
-          className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
-        >
-          <ArrowLeft className="size-4" />
-          {dict.gitProviders.backToList}
-        </Link>
-        <h1 className="mt-4 text-2xl font-bold text-foreground">
-          {dict.gitProviders.editProvider.title}
-        </h1>
-        <p className="mt-1 text-muted-foreground">
-          {dict.gitProviders.editProvider.description}
-        </p>
-      </div>
-
       <div className="max-w-xl rounded-lg border border-border bg-background p-6">
-        <GitProviderForm provider={provider} lang={lang} />
+        <GitProviderForm provider={result.data} lang={lang} />
+      </div>
+      <div className="max-w-xl">
+        <DevLakeIntegrationPanel providerId={result.data.id} />
       </div>
     </div>
   );

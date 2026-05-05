@@ -27,6 +27,11 @@ from .models import (
     PRAgentConfigCreate,
     PRAgentConfigUpdate,
     PRAgentConfigPublic,
+    # DevLake integration models
+    DevLakeIntegration,
+    DevLakeSyncJob,
+    DevLakeIntegrationUpdate,
+    DevLakeIntegrationPublic,
     # Webhook registry models (P1)
     WebhookDelivery,
     WebhookRegistration,
@@ -34,6 +39,11 @@ from .models import (
     WebhookRegistrationPublic,
     WebhookRegistrationStatus,
     WebhookRegistrationUpdate,
+    # PR review activity / audit
+    PRReviewActivity,
+    PRReviewActivityPublic,
+    PRReviewActivityStats,
+    PRReviewTriggeredBy,
 )
 
 __all__ = [
@@ -69,6 +79,11 @@ __all__ = [
     "PRAgentConfigCreate",
     "PRAgentConfigUpdate",
     "PRAgentConfigPublic",
+    # DevLake integration
+    "DevLakeIntegration",
+    "DevLakeSyncJob",
+    "DevLakeIntegrationUpdate",
+    "DevLakeIntegrationPublic",
     # Webhook registry
     "WebhookDelivery",
     "WebhookRegistration",
@@ -76,4 +91,9 @@ __all__ = [
     "WebhookRegistrationPublic",
     "WebhookRegistrationStatus",
     "WebhookRegistrationUpdate",
+    # PR review activity
+    "PRReviewActivity",
+    "PRReviewActivityPublic",
+    "PRReviewActivityStats",
+    "PRReviewTriggeredBy",
 ]

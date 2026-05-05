@@ -4,13 +4,18 @@
   },
   "nav": {
     "overview": "Overview",
+    "analytics": "Analytics",
     "gitProviders": "Git Providers",
     "llmProviders": "LLM Providers",
+    "automation": "Automation",
+    "webhooks": "Webhooks",
+    "learnings": "Learnings",
     "repositories": "Repositories",
     "llmServers": "LLM Servers",
     "reviewContexts": "Review Contexts",
     "reviews": "Reviews",
-    "settings": "Settings"
+    "settings": "Settings",
+    "knowledgeBase": "Knowledge Base"
   },
   "sidebar": {
     "expandSidebar": "Expand sidebar",
@@ -24,13 +29,15 @@
     "welcome": "Welcome to CoReview",
     "description": "Manage your code reviews and AI-powered PR analysis from one place.",
     "gitProviders": "Git Providers",
-    "connectedProviders": "Connected providers",
+    "connectedProviders": "{n} active",
     "repositories": "Repositories",
-    "trackedRepos": "Tracked repos",
+    "trackedRepos": "Monitored across webhooks and learnings",
     "llmServers": "LLM Servers",
-    "activeServers": "Active servers",
-    "reviews": "Reviews",
-    "totalReviews": "Total reviews",
+    "activeServers": "{n} active",
+    "learnings": "Learnings",
+    "capturedLearnings": "Knowledge captured across repos",
+    "reviewedPRs": "Reviewed PRs",
+    "reviewedPRsDesc": "{n} review tool runs total",
     "gettingStarted": "Getting Started",
     "gettingStartedDesc": "To begin using CoReview, follow these steps:",
     "step1": "Connect a Git provider (GitHub, GitLab, etc.)",
@@ -65,8 +72,21 @@
       "status": "Status",
       "active": "Active",
       "inactive": "Inactive",
+      "webhooks": "Webhooks",
+      "webhooksNone": "None",
       "createdAt": "Created",
       "actions": "Actions"
+    },
+    "tabs": {
+      "ariaLabel": "Provider sections",
+      "credentials": "Credentials",
+      "webhooks": "Repository Webhooks"
+    },
+    "webhooksTab": {
+      "title": "Repository webhooks",
+      "description": "Register and manage per-repository webhooks for this provider.",
+      "appModeBanner": "This GitHub provider is configured as a GitHub App. App installations deliver webhooks to the App's own URL, so per-repository webhooks are not needed here. Manage App events in the GitHub App settings instead.",
+      "unsupportedProvider": "UI-managed webhook registration is not yet available for this provider type. Any existing rows are listed for reference."
     },
     "newProvider": {
       "title": "Add Git Provider",
@@ -111,11 +131,39 @@
       "showToken": "Show token",
       "hideToken": "Hide token",
       "optional": "optional",
+      "autoSyncOnCreate": "Auto-sync with DevLake after creating provider",
+      "autoSyncProjectName": "DevLake project name for auto-sync",
+      "autoSyncProjectNamePlaceholder": "Leave empty to use default (e.g., github-2)",
+      "autoSyncProjectNameHelp": "If provided, auto-sync will use this DevLake project name on first setup.",
+      "autoSyncScopes": "Repository scopes for auto-sync",
+      "autoSyncScopesLoadHint": "Available repositories can be selected after the provider is created and DevLake connection is initialized.",
+      "autoSyncDuplicateConnectionName": "Auto-sync failed because a DevLake connection with this name already exists. Use a different provider name or turn off auto-sync and configure DevLake manually.",
       "create": "Create Provider",
       "update": "Update Provider",
       "saving": "Saving...",
       "cancel": "Cancel",
       "errorGeneric": "Something went wrong. Please try again."
+    },
+    "devlake": {
+      "title": "DevLake Integration",
+      "description": "Configure connection, scopes, and run ingestion for this provider.",
+      "loading": "Loading DevLake settings...",
+      "enabled": "Enable DevLake integration for this provider",
+      "projectName": "DevLake Project Name",
+      "projectNameHelpReuse": "If this name already exists in DevLake, sync links this provider/blueprint to that existing project.",
+      "projectNameHelpCreate": "If it does not exist, a new project will be created and linked",
+      "projectNamePlaceholder": "e.g., my-team-engineering",
+      "scopes": "Repository scopes",
+      "loadingScopes": "Loading available repositories...",
+      "noScopes": "No repositories found yet. Save/validate connection first, then retry.",
+      "invalidScopesJson": "Scopes must be a valid JSON array.",
+      "lastStatus": "Last sync status",
+      "save": "Save DevLake Settings",
+      "saving": "Saving...",
+      "validate": "Validate Connection",
+      "sync": "Run Sync",
+      "syncing": "Syncing...",
+      "syncFailed": "Sync failed. Check backend logs and DevLake credentials."
     },
     "actions": {
       "openMenu": "Open menu",
@@ -259,6 +307,138 @@
       "setDefault": "Set as Default"
     }
   },
+  "analytics": {
+    "title": "Analytics",
+    "description": "Engineering insights from Apache DevLake — powered by Grafana and filtered by your selected provider scopes.",
+    "openInGrafana": "Open in Grafana",
+    "refresh": "Refresh",
+    "notConfigured": {
+      "title": "Grafana dashboard not configured",
+      "description": "Set the NEXT_PUBLIC_DEVLAKE_GRAFANA_URL environment variable to the embed URL of your Apache DevLake Grafana dashboard.",
+      "hint": "Example: http://localhost:3002/d/<dashboard-uid>/<slug>?orgId=1&kiosk=tv&theme=light"
+    },
+    "loadError": {
+      "title": "Unable to display the dashboard",
+      "description": "Your browser blocked the embedded Grafana instance. Check that Grafana allows embedding (allow_embedding = true) and that the URL is correct."
+    }
+  },
+  "learnings": {
+    "title": "Learnings",
+    "description": "Knowledge the AI reviewer has captured from past PR discussions.",
+    "disabled": {
+      "title": "Knowledge base disabled",
+      "description": "Enable KNOWLEDGE_BASE__ENABLED in your PR-Agent configuration to start capturing learnings."
+    },
+    "empty": {
+      "title": "No learnings yet",
+      "description": "Learnings will appear here after reviewers reply to PR review comments with guidance for the AI."
+    },
+    "filters": {
+      "repo": "Repository",
+      "allRepos": "All repositories",
+      "limit": "Limit",
+      "refresh": "Refresh",
+      "sourceType": "Source type",
+      "allSources": "All sources",
+      "status": "Status",
+      "allStatuses": "All statuses"
+    },
+    "table": {
+      "repo": "Repository",
+      "learning": "Learning",
+      "createdAt": "Captured",
+      "source": "Source",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "source": {
+      "pr": "PR #{pr}",
+      "unknown": "—"
+    },
+    "sourceType": {
+      "explicit_learn": "/learn command",
+      "passive_capture": "@-mention (legacy)",
+      "automatic_extraction": "Rule match",
+      "manual_import": "Manual import",
+      "unknown": "Unknown"
+    },
+    "status": {
+      "raw": "Refining",
+      "refined": "Ready",
+      "rejected": "Rejected",
+      "raw_tooltip": "Stored verbatim. The background worker will refine the wording before it is shown in reviews.",
+      "refined_tooltip": "Ready to be applied in future reviews.",
+      "rejected_tooltip": "Rejected during refinement. Review or delete this entry.",
+      "rejection_reason_label": "Reason"
+    },
+    "actions": {
+      "delete": "Delete",
+      "deleting": "Deleting...",
+      "view": "View details"
+    },
+    "deleteDialog": {
+      "title": "Delete learning",
+      "description": "This will remove the learning from the knowledge base. This action cannot be undone.",
+      "cancel": "Cancel",
+      "confirm": "Delete"
+    },
+    "apiError": "Failed to connect to PR-Agent API",
+    "stats": {
+      "total": "Total learnings",
+      "repos": "Repositories covered"
+    }
+  },
+  "automation": {
+    "title": "Automation",
+    "description": "Control which PR-Agent commands run automatically when pull requests are opened or updated. Changes take effect on the next webhook delivery — no redeploy required.",
+    "global": {
+      "title": "Global switches",
+      "description": "Settings applied across every git provider.",
+      "disableAutoFeedback": "Disable all automatic feedback",
+      "disableAutoFeedbackHelp": "When enabled, PR-Agent will not run any automatic tools on new PRs or pushes. Comment triggers still work."
+    },
+    "provider": {
+      "title": "Per-provider behavior",
+      "description": "Pick which commands run automatically on each supported git provider."
+    },
+    "providers": {
+      "github": "GitHub",
+      "gitlab": "GitLab",
+      "bitbucket": "Bitbucket",
+      "azure": "Azure DevOps",
+      "gitea": "Gitea"
+    },
+    "fields": {
+      "prCommands": "Commands on PR opened",
+      "prCommandsHelp": "Run when a PR is opened, reopened, or marked ready for review. Add slash commands like /review, /describe, /improve.",
+      "prCommandsEmpty": "No commands will run automatically on new PRs.",
+      "pushCommands": "Commands on push to open PR",
+      "pushCommandsHelp": "Run when new commits are pushed to an open PR. Requires the push trigger to be enabled.",
+      "pushCommandsEmpty": "No commands will run on new pushes.",
+      "handlePushTrigger": "Enable push trigger",
+      "handlePushTriggerHelp": "Listen for commits pushed to open PRs and run the push commands above.",
+      "handlePrActions": "PR events that trigger commands",
+      "handlePrActionsHelp": "Which GitHub pull_request event types should invoke the PR commands.",
+      "feedbackOnDraft": "Run on draft PRs",
+      "feedbackOnDraftHelp": "By default PR-Agent skips draft PRs. Enable to include them.",
+      "add": "Add"
+    },
+    "actions": {
+      "save": "Save changes",
+      "saving": "Saving…",
+      "reload": "Reload webhook cache",
+      "reloadHelp": "Forces the webhook service to re-read config from the database on its next delivery."
+    },
+    "messages": {
+      "saved": "Automation config saved. Webhook service will pick up changes on the next delivery.",
+      "reloaded": "Webhook cache invalidated."
+    },
+    "errors": {
+      "loadFailed": "Failed to load automation config.",
+      "saveFailed": "Failed to save automation config.",
+      "reloadFailed": "Failed to reload webhook cache."
+    }
+  },
   "tokenLimits": {
     "title": "Token Limits",
     "description": "Configure token limits for PR descriptions, commits, and model context windows.",
@@ -278,6 +458,169 @@
       "saveSuccess": "Token limits updated successfully.",
       "resetSuccess": "Token limits reset to defaults.",
       "errorGeneric": "Something went wrong. Please try again."
+    }
+  },
+  "webhooks": {
+    "title": "Webhooks",
+    "description": "Register and manage per-repository webhooks on your git providers.",
+    "addWebhook": "Add Webhook",
+    "newTitle": "New Webhook",
+    "newDescription": "Create a draft webhook, then register it on the provider.",
+    "editTitle": "Edit Webhook",
+    "editDescription": "Update webhook configuration. Save changes before re-registering.",
+    "deleteConfirm": "Delete webhook for {repo}? This also removes it on the provider.",
+    "empty": {
+      "title": "No webhooks configured",
+      "description": "Register a webhook to start receiving events from a repository."
+    },
+    "table": {
+      "repo": "Repository",
+      "provider": "Provider",
+      "url": "Target URL",
+      "events": "Events",
+      "status": "Status",
+      "actions": "Actions"
+    },
+    "status": {
+      "draft": "Draft",
+      "registered": "Registered",
+      "failed": "Failed",
+      "deleted": "Deleted"
+    },
+    "actions": {
+      "register": "Register on provider",
+      "registering": "Registering...",
+      "unregister": "Unregister",
+      "test": "Send test ping",
+      "deliveries": "View deliveries",
+      "edit": "Edit",
+      "delete": "Delete"
+    },
+    "form": {
+      "back": "Back to webhooks",
+      "provider": "Git Provider",
+      "providerPlaceholder": "Select a provider",
+      "providerLockedNote": "Provider cannot be changed after creation. Delete and recreate to switch.",
+      "repo": "Repository",
+      "repoPlaceholder": "owner/repo",
+      "repoHint": "Format varies by provider: owner/repo (GitHub), group/project (GitLab).",
+      "targetUrl": "Target URL",
+      "useSuggested": "Use suggested URL",
+      "events": "Events",
+      "eventsHint": "Leave empty to use provider defaults. Click presets or add custom events.",
+      "eventsPlaceholder": "e.g. pull_request",
+      "eventsEmpty": "No events set - provider defaults will be used.",
+      "addEvent": "Add",
+      "contentType": "Content type",
+      "secret": "Signing secret",
+      "secretPlaceholder": "Leave blank to auto-generate",
+      "secretKeepPlaceholder": "Leave blank to keep existing",
+      "secretHintCreate": "Used by the provider to sign payloads. A random secret is generated if you leave this blank.",
+      "secretHintEdit": "Enter a new value to rotate the secret. Leave blank to keep the current one.",
+      "active": "Active",
+      "activeHint": "Inactive webhooks are stored but the provider will not deliver events.",
+      "insecureSsl": "Skip SSL verification",
+      "insecureSslHint": "Disables TLS certificate checks at the provider. Not recommended.",
+      "cancel": "Cancel",
+      "saveCreate": "Create draft",
+      "saveUpdate": "Save changes"
+    },
+    "deliveries": {
+      "title": "Recent deliveries",
+      "loading": "Loading deliveries...",
+      "empty": "No deliveries recorded yet."
+    },
+    "messages": {
+      "working": "Working...",
+      "testSent": "Test delivery dispatched."
+    },
+    "errors": {
+      "apiError": "Failed to load webhooks",
+      "actionFailed": "Action failed. Check the provider credentials and try again.",
+      "fetchDeliveriesFailed": "Failed to load deliveries.",
+      "saveFailed": "Failed to save webhook.",
+      "providerRequired": "Please select a git provider."
+    }
+  },
+  "settings": {
+    "title": "Settings",
+    "description": "Manage CoReview behavior across automation and knowledge capture.",
+    "backToSettings": "Back to Settings",
+    "sections": {
+      "automation": {
+        "title": "Automation",
+        "description": "Configure which commands run automatically on PRs and pushes, per git provider."
+      },
+      "knowledgeBase": {
+        "title": "Knowledge Base",
+        "description": "Control the /learn command, automatic rule-based capture, retrieval, and refinement."
+      }
+    }
+  },
+  "knowledgeBase": {
+    "title": "Knowledge Base",
+    "description": "Capture reviewer feedback as durable learnings and surface them during reviews.",
+    "master": {
+      "title": "Status",
+      "description": "Turn the knowledge base off to pause both capture and retrieval. Existing data is preserved.",
+      "enabledLabel": "Enable knowledge base",
+      "enabledHelp": "When disabled, /learn is rejected and past learnings are not injected into reviews."
+    },
+    "capture": {
+      "title": "Capture",
+      "description": "Pick how PR comments become learnings: the explicit /learn command or automatic rule matching.",
+      "explicitLearnLabel": "Enable the /learn command",
+      "explicitLearnHelp": "Reviewers capture learnings by typing /learn <text>. Recommended. Disable to fall back to rule-based extraction.",
+      "commandLabel": "Command trigger",
+      "commandHelp": "The token reviewers type to capture a learning. Default is /learn."
+    },
+    "rules": {
+      "title": "Automatic extraction rules",
+      "activeHelp": "Rules match each PR comment case-insensitively. A hit captures the entire comment as a learning. Active because the /learn command is disabled.",
+      "disabledHelp": "Rules only run when the /learn command is disabled. We keep your list here so the feature is ready if you ever toggle off.",
+      "label": "Rule phrases",
+      "description": "Any phrase below that appears in a comment triggers capture.",
+      "placeholder": "e.g. we prefer",
+      "emptyLabel": "No rules configured.",
+      "addLabel": "Add rule"
+    },
+    "retrieval": {
+      "title": "Retrieval",
+      "description": "Control how past learnings are surfaced during reviews.",
+      "applyToReviewLabel": "Inject learnings into /review",
+      "applyToReviewHelp": "When on, matching learnings are added to the context PR-Agent uses for /review.",
+      "maxRetrievedLabel": "Max learnings per review",
+      "maxRetrievedHelp": "Upper bound on how many learnings PR-Agent can attach to a single review.",
+      "maxSummaryLabel": "Max summary characters",
+      "maxSummaryHelp": "Truncate each learning's injected summary to this many characters."
+    },
+    "refinement": {
+      "title": "Refinement",
+      "description": "Stage 2 background worker settings. The worker picks up raw learnings and turns them into polished entries.",
+      "duplicateThresholdLabel": "Duplicate threshold",
+      "duplicateThresholdHelp": "Cosine similarity above which two learnings are considered duplicates (0-1). Higher is stricter."
+    },
+    "legacy": {
+      "title": "Legacy passive capture",
+      "deprecatedBadge": "Deprecated",
+      "description": "Older @-mention based capture. Kept for backward compatibility; will be removed in a future release.",
+      "captureLabel": "Capture from @-mentions",
+      "captureHelp": "Scan PR comments that mention the bot for preference markers. Superseded by the /learn command and extraction rules above.",
+      "requireMentionLabel": "Require @-mention to capture",
+      "requireMentionHelp": "Only considers comments that explicitly tag the bot. Ignored when the legacy capture is off."
+    },
+    "actions": {
+      "save": "Save changes",
+      "reload": "Reload from DB"
+    },
+    "messages": {
+      "saved": "Knowledge base config saved. Webhook processes will pick up changes on the next delivery.",
+      "reloaded": "Cache invalidated. Next webhook delivery will re-read the config from the database."
+    },
+    "errors": {
+      "loadFailed": "Failed to load knowledge base config.",
+      "saveFailed": "Failed to save knowledge base config.",
+      "reloadFailed": "Failed to invalidate the config cache."
     }
   }
 }

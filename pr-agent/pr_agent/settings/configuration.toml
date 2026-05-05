@@ -4,7 +4,7 @@
 
 [config]
 # models
-model=""
+model="MiniMax"
 fallback_models=[""]
 # model="openai/MiniMax/MiniMax-M2.5"
 # fallback_models=[""]
@@ -208,6 +208,55 @@ force_local_db=false
 num_retrieved_snippets=5
 
 [pr_config] # /config #
+
+[knowledge_base]
+enabled = false
+provider = "mem0"
+scope = "local"
+# Legacy passive capture (`@<app> ...` in a PR comment). Kept for backward
+# compatibility only; flipped to off-by-default in favour of the explicit
+# `/learn` command below. Will be removed in a follow-up release.
+capture_from_pr_comments = false
+apply_to_review = true
+require_agent_mention = true
+# Explicit `/learn` command. ON by default - reviewers capture learnings by
+# typing `/learn <text>` on any PR comment and the content is stored as-is.
+# When an administrator turns this OFF, `/learn` is rejected and the system
+# instead scans free-form PR comments for any of the phrases in
+# `extraction_rules` below (case-insensitive substring match). Disabling
+# `explicit_learn_enabled` with an empty `extraction_rules` captures nothing.
+explicit_learn_enabled = true
+learn_command = "/learn"
+
+# Rule phrases for automatic extraction. Only consulted when
+# `explicit_learn_enabled = false`. Each entry is matched case-insensitively
+# against the comment body; the first match captures the whole comment as a
+# learning. Example values: ["we prefer", "in this project", "our convention"].
+# Keep the list focused - every phrase is effectively a capture trigger.
+extraction_rules = []
+
+# Reserved for the stage 2 background refinement worker - unused by stage 1.
+duplicate_threshold = 0.9
+max_retrieved_learnings = 5
+max_summary_chars = 1200
+chroma_path = "./.mem0/chroma"
+collection_name = "pr_agent_repo_learnings"
+embedding_model = "BAAI/bge-m3"
+embedding_dimensions = 0 # 0/empty disables forwarding dimensions to embedder
+#embedding_model = "text-embedding-3-small"
+# Optional override for the OpenAI-compatible base URL Mem0 uses for
+# embeddings + internal fact-extraction LLM calls. Leave empty to inherit
+# `[openai].api_base` / `OPENAI_BASE_URL`. Point this at any gateway that
+# speaks the OpenAI embeddings API (e.g. VTN Watson at
+# "https://netmind.viettel.vn/gateway/v1").
+embedding_base_url = ""
+# Model Mem0 uses for its internal fact-extraction / memory-update prompts.
+# Kept separate from `[config].model` because Mem0 talks to the gateway over
+# the raw OpenAI SDK, so the gateway may prefix the model with `openai/`
+# before checking the allowlist. Use a name that matches the allowlist
+# exactly (e.g. "openai/gpt-oss-120b:netmind" on VTN). Leave empty to fall
+# back to `[config].model`.
+llm_model = ""
 
 [pr_help_docs]
 repo_url = "" #If not overwritten, will use the repo from where the context came from (issue or PR)

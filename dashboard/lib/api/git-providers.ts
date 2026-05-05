@@ -3,11 +3,20 @@ import type {
   GitProviderApiResponse,
   CreateGitProviderInput,
   UpdateGitProviderInput,
+  DevLakeIntegration,
+  DevLakeIntegrationApiResponse,
+  DevLakeValidateResponse,
+  DevLakeSyncAcceptedResponse,
+  DevLakeSyncJobStatusResponse,
+  DevLakeRemoteScopesResponse,
+  UpdateDevLakeIntegrationInput,
   ApiResponse,
 } from "./types";
 import {
   transformApiResponseToProvider,
+  transformDevLakeApiResponse,
   transformCreateInputToApiRequest,
+  transformUpdateDevLakeInputToApiRequest,
   transformUpdateInputToApiRequest,
 } from "./types";
 
@@ -92,10 +101,18 @@ export async function getGitProvider(
  */
 export async function createGitProvider(
   input: CreateGitProviderInput,
+  options?: { autoSyncOnCreate?: boolean; devlakeProjectName?: string },
 ): Promise<ApiResponse<GitProvider>> {
   try {
     const apiRequest = transformCreateInputToApiRequest(input);
-    const response = await fetch(`${API_BASE_URL}/api/git-providers`, {
+    const params = new URLSearchParams();
+    if (options?.autoSyncOnCreate === true) {
+      params.set("auto_sync_on_create", "true");
+      const projectName = options?.devlakeProjectName?.trim();
+      if (projectName) params.set("devlake_project_name", projectName);
+    }
+    const query = params.toString() ? `?${params.toString()}` : "";
+    const response = await fetch(`${API_BASE_URL}/api/git-providers${query}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(apiRequest),
@@ -203,6 +220,201 @@ export async function toggleGitProviderStatus(
     return { success: true, data: transformApiResponseToProvider(data) };
   } catch (error) {
     console.error("Failed to toggle git provider status:", error);
+    return { success: false, error: "Failed to connect to PR-Agent API" };
+  }
+}
+
+export async function getDevLakeIntegration(
+  providerId: number | string,
+): Promise<ApiResponse<DevLakeIntegration>> {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/git-providers/${providerId}/devlake`,
+      {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+      },
+    );
+    if (!response.ok) {
+      const error = await parseErrorResponse(response);
+      return {
+        success: false,
+        error: error.detail || error.message || "Failed to load DevLake config",
+      };
+    }
+    const data: DevLakeIntegrationApiResponse = await response.json();
+    return { success: true, data: transformDevLakeApiResponse(data) };
+  } catch (error) {
+    console.error("Failed to get DevLake integration:", error);
+    return { success: false, error: "Failed to connect to PR-Agent API" };
+  }
+}
+
+export async function updateDevLakeIntegration(
+  providerId: number | string,
+  input: UpdateDevLakeIntegrationInput,
+): Promise<ApiResponse<DevLakeIntegration>> {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/git-providers/${providerId}/devlake`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(transformUpdateDevLakeInputToApiRequest(input)),
+      },
+    );
+    if (!response.ok) {
+      const error = await parseErrorResponse(response);
+      return {
+        success: false,
+        error: error.detail || error.message || "Failed to save DevLake config",
+      };
+    }
+    const data: DevLakeIntegrationApiResponse = await response.json();
+    return { success: true, data: transformDevLakeApiResponse(data) };
+  } catch (error) {
+    console.error("Failed to update DevLake integration:", error);
+    return { success: false, error: "Failed to connect to PR-Agent API" };
+  }
+}
+
+export async function validateDevLakeIntegration(
+  providerId: number | string,
+): Promise<ApiResponse<DevLakeValidateResponse>> {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/git-providers/${providerId}/devlake/validate`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+    if (!response.ok) {
+      const error = await parseErrorResponse(response);
+      return {
+        success: false,
+        error: error.detail || error.message || "Validation failed",
+      };
+    }
+    const data: DevLakeValidateResponse = await response.json();
+    return { success: true, data };
+  } catch (error) {
+    console.error("Failed to validate DevLake integration:", error);
+    return { success: false, error: "Failed to connect to PR-Agent API" };
+  }
+}
+
+export async function listDevLakeRemoteScopes(
+  providerId: number | string,
+): Promise<ApiResponse<DevLakeRemoteScopesResponse>> {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/git-providers/${providerId}/devlake/remote-scopes`,
+      {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+      },
+    );
+    if (!response.ok) {
+      const error = await parseErrorResponse(response);
+      return {
+        success: false,
+        error: error.detail || error.message || "Failed to load remote scopes",
+      };
+    }
+    const data: DevLakeRemoteScopesResponse = await response.json();
+    return { success: true, data };
+  } catch (error) {
+    console.error("Failed to list DevLake remote scopes:", error);
+    return { success: false, error: "Failed to connect to PR-Agent API" };
+  }
+}
+
+export async function previewDevLakeRemoteScopes(
+  input: CreateGitProviderInput,
+): Promise<ApiResponse<DevLakeRemoteScopesResponse>> {
+  try {
+    const apiRequest = transformCreateInputToApiRequest(input);
+    const response = await fetch(
+      `${API_BASE_URL}/api/git-providers/devlake/remote-scopes/preview`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(apiRequest),
+      },
+    );
+    if (!response.ok) {
+      const error = await parseErrorResponse(response);
+      return {
+        success: false,
+        error: error.detail || error.message || "Failed to load remote scopes",
+      };
+    }
+    const data: DevLakeRemoteScopesResponse = await response.json();
+    return { success: true, data };
+  } catch (error) {
+    console.error("Failed to preview DevLake remote scopes:", error);
+    return { success: false, error: "Failed to connect to PR-Agent API" };
+  }
+}
+
+export async function enqueueDevLakeSync(
+  providerId: number | string,
+  input?: { fullSync?: boolean; skipCollectors?: boolean },
+): Promise<ApiResponse<DevLakeSyncAcceptedResponse>> {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/git-providers/${providerId}/devlake/sync`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          full_sync: input?.fullSync ?? false,
+          skip_collectors: input?.skipCollectors ?? false,
+        }),
+      },
+    );
+    if (!response.ok) {
+      const error = await parseErrorResponse(response);
+      return {
+        success: false,
+        error: error.detail || error.message || "Failed to queue DevLake sync",
+      };
+    }
+    const data: DevLakeSyncAcceptedResponse = await response.json();
+    return { success: true, data };
+  } catch (error) {
+    console.error("Failed to enqueue DevLake sync:", error);
+    return { success: false, error: "Failed to connect to PR-Agent API" };
+  }
+}
+
+export async function getDevLakeSyncJobStatus(
+  providerId: number | string,
+  jobId: string,
+): Promise<ApiResponse<DevLakeSyncJobStatusResponse>> {
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/api/git-providers/${providerId}/devlake/sync-jobs/${jobId}`,
+      {
+        method: "GET",
+        headers: { "Content-Type": "application/json" },
+        cache: "no-store",
+      },
+    );
+    if (!response.ok) {
+      const error = await parseErrorResponse(response);
+      return {
+        success: false,
+        error: error.detail || error.message || "Failed to load sync job status",
+      };
+    }
+    const data: DevLakeSyncJobStatusResponse = await response.json();
+    return { success: true, data };
+  } catch (error) {
+    console.error("Failed to get DevLake sync job status:", error);
     return { success: false, error: "Failed to connect to PR-Agent API" };
   }
 }
