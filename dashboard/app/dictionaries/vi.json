@@ -309,13 +309,21 @@
   },
   "analytics": {
     "title": "Phân tích",
-    "description": "Thông tin kỹ thuật từ Apache DevLake — hiển thị qua Grafana và lọc theo phạm vi đã chọn của nhà cung cấp.",
+    "description": "Thông tin kỹ thuật từ Apache DevLake — hiển thị qua Grafana và lọc theo phạm vi của từng nhà cung cấp.",
+    "providerLabel": "Bảng điều khiển theo nhà cung cấp Git",
+    "providerPlaceholder": "Chọn nhà cung cấp",
+    "providerNotConfigured": "Bảng điều khiển cho nhà cung cấp đã chọn chưa được cấu hình. Hãy chạy script bootstrap Grafana và thiết lập NEXT_PUBLIC_DEVLAKE_GRAFANA_DASHBOARD_UID_MAP.",
+    "providers": {
+      "github": "GitHub",
+      "gitlab": "GitLab",
+      "azureDevops": "Azure DevOps"
+    },
     "openInGrafana": "Mở trong Grafana",
     "refresh": "Làm mới",
     "notConfigured": {
       "title": "Chưa cấu hình bảng điều khiển Grafana",
-      "description": "Thiết lập biến môi trường NEXT_PUBLIC_DEVLAKE_GRAFANA_URL tới URL nhúng bảng Grafana của Apache DevLake.",
-      "hint": "Ví dụ: http://localhost:3002/d/<dashboard-uid>/<slug>?orgId=1&kiosk=tv&theme=light"
+      "description": "Thiết lập NEXT_PUBLIC_DEVLAKE_GRAFANA_BASE_URL và NEXT_PUBLIC_DEVLAKE_GRAFANA_DASHBOARD_UID_MAP (hoặc biến cũ NEXT_PUBLIC_DEVLAKE_GRAFANA_URL) để nhúng dashboard Apache DevLake.",
+      "hint": "Ví dụ: NEXT_PUBLIC_DEVLAKE_GRAFANA_BASE_URL=http://localhost:30090/grafana và NEXT_PUBLIC_DEVLAKE_GRAFANA_DASHBOARD_UID_MAP=github:coreview-github,gitlab:coreview-gitlab,azure_devops:coreview-azuredevops"
     },
     "loadError": {
       "title": "Không thể hiển thị bảng điều khiển",

@@ -309,13 +309,21 @@
   },
   "analytics": {
     "title": "Analytics",
-    "description": "Engineering insights from Apache DevLake — powered by Grafana and filtered by your selected provider scopes.",
+    "description": "Engineering insights from Apache DevLake — powered by Grafana and filtered by provider scopes.",
+    "providerLabel": "Git provider dashboard",
+    "providerPlaceholder": "Select provider",
+    "providerNotConfigured": "The selected provider dashboard is not configured yet. Run the Grafana bootstrap script and set NEXT_PUBLIC_DEVLAKE_GRAFANA_DASHBOARD_UID_MAP.",
+    "providers": {
+      "github": "GitHub",
+      "gitlab": "GitLab",
+      "azureDevops": "Azure DevOps"
+    },
     "openInGrafana": "Open in Grafana",
     "refresh": "Refresh",
     "notConfigured": {
       "title": "Grafana dashboard not configured",
-      "description": "Set the NEXT_PUBLIC_DEVLAKE_GRAFANA_URL environment variable to the embed URL of your Apache DevLake Grafana dashboard.",
-      "hint": "Example: http://localhost:3002/d/<dashboard-uid>/<slug>?orgId=1&kiosk=tv&theme=light"
+      "description": "Set NEXT_PUBLIC_DEVLAKE_GRAFANA_BASE_URL and NEXT_PUBLIC_DEVLAKE_GRAFANA_DASHBOARD_UID_MAP (or the legacy NEXT_PUBLIC_DEVLAKE_GRAFANA_URL) to embed Apache DevLake dashboards.",
+      "hint": "Example: NEXT_PUBLIC_DEVLAKE_GRAFANA_BASE_URL=http://localhost:30090/grafana and NEXT_PUBLIC_DEVLAKE_GRAFANA_DASHBOARD_UID_MAP=github:coreview-github,gitlab:coreview-gitlab,azure_devops:coreview-azuredevops"
     },
     "loadError": {
       "title": "Unable to display the dashboard",

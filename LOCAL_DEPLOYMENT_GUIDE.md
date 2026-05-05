@@ -37,6 +37,31 @@ Verify DevLake is up:
 
 If this is your first run, complete any initial DevLake setup in the UI.
 
+## 3.1) Bootstrap shareable Grafana dashboards (one-time)
+
+After DevLake is up, run:
+
+```bash
+./scripts/devlake-setup-grafana-dashboards.sh
+```
+
+The script duplicates the built-in DevLake GitHub/GitLab/Azure DevOps dashboards
+into a `CoReview Dashboards` folder and prints env values.
+
+Copy the generated lines into `.env`:
+
+- `NEXT_PUBLIC_DEVLAKE_GRAFANA_BASE_URL=...`
+- `NEXT_PUBLIC_DEVLAKE_GRAFANA_DASHBOARD_UID_MAP=github:...,gitlab:...,azure_devops:...`
+
+Then restart the dashboard service if it is already running:
+
+```bash
+docker compose up -d dashboard
+```
+
+You can safely re-run this script any time (it updates/overwrites the same
+CoReview dashboard UIDs instead of creating duplicates).
+
 ## 4) Start main stack
 
 Choose one git provider profile (you can run both if needed):

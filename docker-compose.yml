@@ -284,8 +284,10 @@ services:
     environment:
       NODE_ENV: production
       NEXT_PUBLIC_PR_AGENT_API_URL: http://pr-agent-api:3001
+      NEXT_PUBLIC_DEVLAKE_GRAFANA_BASE_URL: ${NEXT_PUBLIC_DEVLAKE_GRAFANA_BASE_URL:-}
+      NEXT_PUBLIC_DEVLAKE_GRAFANA_DASHBOARD_UID_MAP: ${NEXT_PUBLIC_DEVLAKE_GRAFANA_DASHBOARD_UID_MAP:-}
       # Embed URL of the Apache DevLake Grafana dashboard.
-      # Leave unset to hide the embed and show a setup hint instead.
+      # Legacy fallback: leave unset when using provider UID mapping.
       NEXT_PUBLIC_DEVLAKE_GRAFANA_URL: ${NEXT_PUBLIC_DEVLAKE_GRAFANA_URL:-}
     depends_on:
       pr-agent-api:
